@@ -11,6 +11,9 @@
 - 月度收入、支出和结余
 - 可编辑并云端同步的月度预算
 - 预算使用进度和超支提醒
+- 网络失败保留表单并支持重新加载
+- 忘记密码和安全的密码重置流程
+- 防止电子表格公式注入的 CSV 导出
 - 支出分类图表
 - 按分类或备注搜索
 - 按月筛选和 CSV 导出
@@ -33,6 +36,8 @@ npm run dev
 3. 在项目根目录复制 `.env.example`，命名为 `.env.local`。
 4. 在 Supabase 项目设置的 API 页面找到 Project URL 和 Publishable key，填入 `.env.local`。
 5. 重新运行 `npm run dev`。
+
+如果项目已经运行过早期版本的 `schema.sql`，请再在 SQL Editor 中运行 `supabase/migrations/002_reliability.sql`。它会增加分类持久化和账目更新时间，不会删除已有数据。
 
 不要把 `.env.local`、Secret key 或 Service role key 上传到 GitHub。前端只能使用 Publishable key。
 

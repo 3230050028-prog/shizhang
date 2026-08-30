@@ -1,24 +1,31 @@
 import { useState, type FormEvent } from 'react'
 import { Target, X } from 'lucide-react'
+import type { ActionResult } from '../types'
 
 interface BudgetFormProps {
   monthLabel: string
   currentAmount: number
   onClose: () => void
-  onSave: (amount: number) => Promise<void>
+  onSave: (amount: number) => Promise<ActionResult>
 }
 
 export function BudgetForm({ monthLabel, currentAmount, onClose, onSave }: BudgetFormProps) {
   const [amount, setAmount] = useState(currentAmount ? String(currentAmount) : '')
   const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
 
   const submit = async (event: FormEvent) => {
     event.preventDefault()
     const numericAmount = Number(amount)
     if (!numericAmount || numericAmount <= 0) return
     setSaving(true)
-    await onSave(numericAmount)
+    setError('')
+    const result = await onSave(numericAmount)
     setSaving(false)
+    if (!result.ok) {
+      setError(result.error ?? '保存失败，请稍后重试。')
+      return
+    }
     onClose()
   }
 
@@ -39,6 +46,7 @@ export function BudgetForm({ monthLabel, currentAmount, onClose, onSave }: Budge
             <span><b>¥</b><input autoFocus inputMode="decimal" value={amount} onChange={(event) => setAmount(event.target.value)} placeholder="例如 3000" required /></span>
           </label>
           <p className="form-hint">预算只用于提醒，不会限制你记录实际支出。</p>
+          {error && <p className="inline-error">{error}</p>}
           <button className="primary-button modal-submit" disabled={saving}>{saving ? '保存中…' : '保存预算'}</button>
         </form>
       </section>

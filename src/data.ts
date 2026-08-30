@@ -1,4 +1,5 @@
 import type { Transaction } from './types'
+import { toLocalDate } from './lib/date'
 
 export const expenseCategories = [
   '餐饮',
@@ -16,7 +17,7 @@ export const incomeCategories = ['工资', '奖金', '理财', '兼职', '红包
 const today = new Date()
 const dateInCurrentMonth = (day: number) => {
   const date = new Date(today.getFullYear(), today.getMonth(), day)
-  return date.toISOString().slice(0, 10)
+  return toLocalDate(date)
 }
 
 export const demoTransactions: Transaction[] = [
@@ -77,4 +78,3 @@ export const categoryColors: Record<string, string> = {
   红包: '#e36a68',
   其他: '#9aa3ad',
 }
-

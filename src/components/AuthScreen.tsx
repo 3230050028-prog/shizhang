@@ -17,10 +17,16 @@ export function AuthScreen() {
     setLoading(true)
     setMessage('')
 
-    const result =
-      mode === 'login'
+    let result
+    try {
+      result = mode === 'login'
         ? await supabase.auth.signInWithPassword({ email, password })
         : await supabase.auth.signUp({ email, password })
+    } catch {
+      setLoading(false)
+      setMessage('网络连接失败，请检查网络后重试。')
+      return
+    }
 
     setLoading(false)
     if (result.error) {
@@ -30,6 +36,26 @@ export function AuthScreen() {
 
     if (mode === 'register' && !result.data.session) {
       setMessage('注册成功！请前往邮箱完成验证，然后回来登录。')
+    }
+  }
+
+  const requestPasswordReset = async () => {
+    if (!supabase) return
+    if (!email.trim()) {
+      setMessage('请先填写注册时使用的邮箱。')
+      return
+    }
+    setLoading(true)
+    setMessage('')
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/`,
+      })
+      setMessage(error ? error.message : '重置邮件已发送，请检查邮箱。')
+    } catch {
+      setMessage('网络连接失败，请稍后重试。')
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -102,6 +128,10 @@ export function AuthScreen() {
                 </button>
               </span>
             </label>
+
+            {mode === 'login' && (
+              <button className="forgot-button" type="button" onClick={requestPasswordReset} disabled={loading}>忘记密码？</button>
+            )}
 
             {message && <p className="form-message">{message}</p>}
 

@@ -1,13 +1,14 @@
 import { useState, type FormEvent } from 'react'
 import { X } from 'lucide-react'
 import { expenseCategories, incomeCategories } from '../data'
-import type { TransactionInput, TransactionType } from '../types'
+import { toLocalDate } from '../lib/date'
+import type { ActionResult, TransactionInput, TransactionType } from '../types'
 
 interface TransactionFormProps {
   initial?: TransactionInput
   knownCategories?: Record<TransactionType, string[]>
   onClose: () => void
-  onSave: (input: TransactionInput) => Promise<void>
+  onSave: (input: TransactionInput) => Promise<ActionResult>
 }
 
 export function TransactionForm({ initial, knownCategories, onClose, onSave }: TransactionFormProps) {
@@ -16,8 +17,9 @@ export function TransactionForm({ initial, knownCategories, onClose, onSave }: T
   const [category, setCategory] = useState(initial?.category ?? expenseCategories[0])
   const [customCategory, setCustomCategory] = useState('')
   const [note, setNote] = useState(initial?.note ?? '')
-  const [date, setDate] = useState(initial?.occurred_on ?? new Date().toISOString().slice(0, 10))
+  const [date, setDate] = useState(initial?.occurred_on ?? toLocalDate())
   const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
   const defaultCategories = type === 'expense' ? expenseCategories : incomeCategories
   const categories = [...new Set([
     ...defaultCategories,
@@ -37,7 +39,8 @@ export function TransactionForm({ initial, knownCategories, onClose, onSave }: T
     if (!numericAmount || numericAmount <= 0) return
 
     setSaving(true)
-    await onSave({
+    setError('')
+    const result = await onSave({
       type,
       amount: numericAmount,
       category: category === '自定义' ? customCategory.trim() || '其他' : category,
@@ -45,6 +48,10 @@ export function TransactionForm({ initial, knownCategories, onClose, onSave }: T
       occurred_on: date,
     })
     setSaving(false)
+    if (!result.ok) {
+      setError(result.error ?? '保存失败，请稍后重试。')
+      return
+    }
     onClose()
   }
 
@@ -115,6 +122,8 @@ export function TransactionForm({ initial, knownCategories, onClose, onSave }: T
             备注
             <input value={note} onChange={(event) => setNote(event.target.value)} placeholder="这笔钱花在了哪里？（选填）" maxLength={100} />
           </label>
+
+          {error && <p className="inline-error">{error}</p>}
 
           <button className="primary-button modal-submit" disabled={saving}>
             {saving ? '保存中…' : initial ? '保存修改' : '保存记录'}

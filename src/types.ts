@@ -27,3 +27,16 @@ export interface Budget {
   amount: number
   created_at?: string
 }
+
+export interface SavedCategory {
+  id: string
+  user_id?: string
+  type: TransactionType
+  name: string
+  created_at?: string
+}
+
+export interface ActionResult {
+  ok: boolean
+  error?: string
+}

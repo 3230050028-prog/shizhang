@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { lazy, Suspense, useMemo, useState } from 'react'
 import {
   ArrowDownLeft,
   ArrowUpRight,
@@ -30,23 +30,29 @@ import {
   X,
   type LucideIcon,
 } from 'lucide-react'
-import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts'
 import { categoryColors } from '../data'
-import type { Budget, Transaction, TransactionInput } from '../types'
+import { escapeCsv } from '../lib/csv'
+import { toLocalMonth } from '../lib/date'
+import type { ActionResult, Budget, SavedCategory, Transaction, TransactionInput } from '../types'
 import { BudgetForm } from './BudgetForm'
 import { TransactionForm } from './TransactionForm'
+
+const SpendingChart = lazy(() => import('./SpendingChart'))
 
 interface DashboardProps {
   transactions: Transaction[]
   budgets: Budget[]
+  savedCategories: SavedCategory[]
   email?: string
   demo?: boolean
   loading?: boolean
-  onAdd: (input: TransactionInput) => Promise<void>
-  onUpdate: (id: string, input: TransactionInput) => Promise<void>
-  onDelete: (id: string) => Promise<void>
-  onSaveBudget: (month: string, amount: number) => Promise<void>
+  onAdd: (input: TransactionInput) => Promise<ActionResult>
+  onUpdate: (id: string, input: TransactionInput) => Promise<ActionResult>
+  onDelete: (id: string) => Promise<ActionResult>
+  onSaveBudget: (month: string, amount: number) => Promise<ActionResult>
   onSignOut?: () => Promise<void>
+  loadError?: string
+  onRetry: () => void
 }
 
 const iconMap: Record<string, LucideIcon> = {
@@ -72,11 +78,10 @@ const formatDate = (date: string) =>
     new Date(`${date}T12:00:00`),
   )
 
-const escapeCsv = (value: string | number) => `"${String(value).replaceAll('"', '""')}"`
-
 export function Dashboard({
   transactions,
   budgets,
+  savedCategories,
   email,
   demo,
   loading,
@@ -85,13 +90,16 @@ export function Dashboard({
   onDelete,
   onSaveBudget,
   onSignOut,
+  loadError,
+  onRetry,
 }: DashboardProps) {
   const [showForm, setShowForm] = useState(false)
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null)
   const [showBudgetForm, setShowBudgetForm] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [query, setQuery] = useState('')
-  const [month, setMonth] = useState(new Date().toISOString().slice(0, 7))
+  const [month, setMonth] = useState(toLocalMonth())
+  const [operationError, setOperationError] = useState('')
 
   const monthTransactions = useMemo(
     () => transactions.filter((item) => item.occurred_on.startsWith(month)),
@@ -119,9 +127,15 @@ export function Dashboard({
   const isOverBudget = budgetAmount > 0 && expense > budgetAmount
 
   const knownCategories = useMemo(() => ({
-    income: [...new Set(transactions.filter((item) => item.type === 'income').map((item) => item.category))],
-    expense: [...new Set(transactions.filter((item) => item.type === 'expense').map((item) => item.category))],
-  }), [transactions])
+    income: [...new Set([
+      ...savedCategories.filter((item) => item.type === 'income').map((item) => item.name),
+      ...transactions.filter((item) => item.type === 'income').map((item) => item.category),
+    ])],
+    expense: [...new Set([
+      ...savedCategories.filter((item) => item.type === 'expense').map((item) => item.name),
+      ...transactions.filter((item) => item.type === 'expense').map((item) => item.category),
+    ])],
+  }), [savedCategories, transactions])
 
   const chartData = useMemo(() => {
     const totals = new Map<string, number>()
@@ -153,6 +167,11 @@ export function Dashboard({
     anchor.download = `拾账-${month}.csv`
     anchor.click()
     URL.revokeObjectURL(url)
+  }
+
+  const deleteItem = async (id: string) => {
+    const result = await onDelete(id)
+    if (!result.ok) setOperationError(result.error ?? '删除失败，请稍后重试。')
   }
 
   const displayMonth = new Intl.DateTimeFormat('zh-CN', {
@@ -211,6 +230,15 @@ export function Dashboard({
           <button className="secondary-button" onClick={exportCsv}><Download size={17} />导出本月</button>
         </section>
 
+        {(loadError || operationError) && (
+          <div className="error-banner">
+            <AlertTriangle size={17} />
+            <span>{loadError ? `账本加载失败：${loadError}` : operationError}</span>
+            {loadError && <button onClick={onRetry}>重新加载</button>}
+            {operationError && <button className="banner-close" onClick={() => setOperationError('')} aria-label="关闭提示"><X size={15} /></button>}
+          </div>
+        )}
+
         <section className="summary-grid">
           <article className="summary-card balance-card">
             <span className="summary-icon"><WalletCards size={21} /></span>
@@ -230,24 +258,9 @@ export function Dashboard({
           <article className="panel chart-panel" id="insight">
             <header className="panel-header"><div><p className="eyebrow">支出去向</p><h2>分类统计</h2></div></header>
             {chartData.length ? (
-              <div className="chart-layout">
-                <div className="chart-wrap">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie data={chartData} dataKey="value" nameKey="name" innerRadius={58} outerRadius={86} paddingAngle={3} isAnimationActive={false}>
-                        {chartData.map((item) => <Cell key={item.name} fill={categoryColors[item.name] ?? '#8d9b92'} />)}
-                      </Pie>
-                      <Tooltip formatter={(value) => money.format(Number(value))} />
-                    </PieChart>
-                  </ResponsiveContainer>
-                  <div className="chart-center"><small>总支出</small><b>{money.format(expense)}</b></div>
-                </div>
-                <div className="chart-legend">
-                  {chartData.slice(0, 5).map((item) => (
-                    <div key={item.name}><span><i style={{ background: categoryColors[item.name] ?? '#8d9b92' }} />{item.name}</span><b>{expense ? Math.round((item.value / expense) * 100) : 0}%</b></div>
-                  ))}
-                </div>
-              </div>
+              <Suspense fallback={<div className="chart-loading">正在绘制图表…</div>}>
+                <SpendingChart data={chartData} expense={expense} formatMoney={(value) => money.format(value)} />
+              </Suspense>
             ) : <EmptyState text="本月还没有支出记录" onAdd={() => setShowForm(true)} />}
           </article>
 
@@ -280,7 +293,7 @@ export function Dashboard({
                     <strong className={item.type}>{item.type === 'income' ? '+' : '-'}{money.format(Number(item.amount))}</strong>
                     <span className="transaction-actions">
                       <button className="icon-button edit-button" onClick={() => setEditingTransaction(item)} aria-label="编辑记录"><Pencil size={15} /></button>
-                      <button className="icon-button delete-button" onClick={() => { if (window.confirm('确定删除这笔记录吗？')) void onDelete(item.id) }} aria-label="删除记录"><Trash2 size={16} /></button>
+                      <button className="icon-button delete-button" onClick={() => { if (window.confirm('确定删除这笔记录吗？')) void deleteItem(item.id) }} aria-label="删除记录"><Trash2 size={16} /></button>
                     </span>
                   </div>
                 )
