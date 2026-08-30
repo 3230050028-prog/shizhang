@@ -6,6 +6,7 @@ import {
   BookOpen,
   BriefcaseBusiness,
   Car,
+  AlertTriangle,
   ChevronDown,
   CircleEllipsis,
   Clapperboard,
@@ -17,6 +18,7 @@ import {
   Leaf,
   LogOut,
   Menu,
+  Pencil,
   Plus,
   ReceiptText,
   Search,
@@ -30,16 +32,20 @@ import {
 } from 'lucide-react'
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts'
 import { categoryColors } from '../data'
-import type { Transaction, TransactionInput } from '../types'
+import type { Budget, Transaction, TransactionInput } from '../types'
+import { BudgetForm } from './BudgetForm'
 import { TransactionForm } from './TransactionForm'
 
 interface DashboardProps {
   transactions: Transaction[]
+  budgets: Budget[]
   email?: string
   demo?: boolean
   loading?: boolean
   onAdd: (input: TransactionInput) => Promise<void>
+  onUpdate: (id: string, input: TransactionInput) => Promise<void>
   onDelete: (id: string) => Promise<void>
+  onSaveBudget: (month: string, amount: number) => Promise<void>
   onSignOut?: () => Promise<void>
 }
 
@@ -70,14 +76,19 @@ const escapeCsv = (value: string | number) => `"${String(value).replaceAll('"', 
 
 export function Dashboard({
   transactions,
+  budgets,
   email,
   demo,
   loading,
   onAdd,
+  onUpdate,
   onDelete,
+  onSaveBudget,
   onSignOut,
 }: DashboardProps) {
   const [showForm, setShowForm] = useState(false)
+  const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null)
+  const [showBudgetForm, setShowBudgetForm] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [month, setMonth] = useState(new Date().toISOString().slice(0, 7))
@@ -102,6 +113,15 @@ export function Dashboard({
     .filter((item) => item.type === 'expense')
     .reduce((sum, item) => sum + Number(item.amount), 0)
   const balance = income - expense
+  const currentBudget = budgets.find((item) => item.month.startsWith(month) && item.category === '全部')
+  const budgetAmount = Number(currentBudget?.amount ?? 0)
+  const budgetPercent = budgetAmount ? Math.round((expense / budgetAmount) * 100) : 0
+  const isOverBudget = budgetAmount > 0 && expense > budgetAmount
+
+  const knownCategories = useMemo(() => ({
+    income: [...new Set(transactions.filter((item) => item.type === 'income').map((item) => item.category))],
+    expense: [...new Set(transactions.filter((item) => item.type === 'expense').map((item) => item.category))],
+  }), [transactions])
 
   const chartData = useMemo(() => {
     const totals = new Map<string, number>()
@@ -231,12 +251,16 @@ export function Dashboard({
             ) : <EmptyState text="本月还没有支出记录" onAdd={() => setShowForm(true)} />}
           </article>
 
-          <article className="panel budget-panel" id="budget">
-            <header className="panel-header"><div><p className="eyebrow">控制节奏</p><h2>本月预算</h2></div><span className="status-pill">规划中</span></header>
-            <div className="budget-number"><strong>¥3,000</strong><span>建议预算</span></div>
-            <div className="progress-track"><span style={{ width: `${Math.min((expense / 3000) * 100, 100)}%` }} /></div>
-            <div className="progress-label"><span>已使用 {money.format(expense)}</span><span>{Math.round((expense / 3000) * 100)}%</span></div>
-            <p className="budget-note">预算编辑和超支提醒将在第二阶段开放。</p>
+          <article className={isOverBudget ? 'panel budget-panel over-budget' : 'panel budget-panel'} id="budget">
+            <header className="panel-header">
+              <div><p className="eyebrow">控制节奏</p><h2>本月预算</h2></div>
+              <button className="text-button" onClick={() => setShowBudgetForm(true)}><Pencil size={14} />{budgetAmount ? '修改' : '设置'}</button>
+            </header>
+            {isOverBudget && <div className="budget-alert"><AlertTriangle size={15} />已超过本月预算</div>}
+            <div className="budget-number"><strong>{budgetAmount ? money.format(budgetAmount) : '尚未设置'}</strong><span>{budgetAmount ? '总支出预算' : '设置预算后可获得进度提醒'}</span></div>
+            <div className="progress-track"><span style={{ width: `${Math.min(budgetPercent, 100)}%` }} /></div>
+            <div className="progress-label"><span>已使用 {money.format(expense)}</span><span>{budgetAmount ? `${budgetPercent}%` : '--'}</span></div>
+            <p className="budget-note">{isOverBudget ? `已超出 ${money.format(expense - budgetAmount)}，可以回顾本月支出分类。` : budgetAmount ? `还可支出 ${money.format(Math.max(budgetAmount - expense, 0))}。` : '设一个轻松可执行的目标，比追求完美更重要。'}</p>
           </article>
         </section>
 
@@ -254,7 +278,10 @@ export function Dashboard({
                     <span className="category-icon" style={{ color: categoryColors[item.category] ?? '#6d7a72', background: `${categoryColors[item.category] ?? '#6d7a72'}18` }}><Icon size={19} /></span>
                     <span className="transaction-copy"><b>{item.note || item.category}</b><small>{item.category} · {formatDate(item.occurred_on)}</small></span>
                     <strong className={item.type}>{item.type === 'income' ? '+' : '-'}{money.format(Number(item.amount))}</strong>
-                    <button className="icon-button delete-button" onClick={() => onDelete(item.id)} aria-label="删除记录"><Trash2 size={16} /></button>
+                    <span className="transaction-actions">
+                      <button className="icon-button edit-button" onClick={() => setEditingTransaction(item)} aria-label="编辑记录"><Pencil size={15} /></button>
+                      <button className="icon-button delete-button" onClick={() => { if (window.confirm('确定删除这笔记录吗？')) void onDelete(item.id) }} aria-label="删除记录"><Trash2 size={16} /></button>
+                    </span>
                   </div>
                 )
               })}
@@ -264,7 +291,22 @@ export function Dashboard({
       </main>
 
       <button className="mobile-add" onClick={() => setShowForm(true)} aria-label="记一笔"><Plus size={24} /></button>
-      {showForm && <TransactionForm onClose={() => setShowForm(false)} onSave={onAdd} />}
+      {(showForm || editingTransaction) && (
+        <TransactionForm
+          initial={editingTransaction ?? undefined}
+          knownCategories={knownCategories}
+          onClose={() => { setShowForm(false); setEditingTransaction(null) }}
+          onSave={(input) => editingTransaction ? onUpdate(editingTransaction.id, input) : onAdd(input)}
+        />
+      )}
+      {showBudgetForm && (
+        <BudgetForm
+          monthLabel={displayMonth}
+          currentAmount={budgetAmount}
+          onClose={() => setShowBudgetForm(false)}
+          onSave={(amount) => onSaveBudget(month, amount)}
+        />
+      )}
     </div>
   )
 }

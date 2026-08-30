@@ -19,3 +19,11 @@ export interface TransactionInput {
   occurred_on: string
 }
 
+export interface Budget {
+  id: string
+  user_id?: string
+  month: string
+  category: string
+  amount: number
+  created_at?: string
+}

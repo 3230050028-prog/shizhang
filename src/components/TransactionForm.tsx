@@ -4,19 +4,26 @@ import { expenseCategories, incomeCategories } from '../data'
 import type { TransactionInput, TransactionType } from '../types'
 
 interface TransactionFormProps {
+  initial?: TransactionInput
+  knownCategories?: Record<TransactionType, string[]>
   onClose: () => void
   onSave: (input: TransactionInput) => Promise<void>
 }
 
-export function TransactionForm({ onClose, onSave }: TransactionFormProps) {
-  const [type, setType] = useState<TransactionType>('expense')
-  const [amount, setAmount] = useState('')
-  const [category, setCategory] = useState(expenseCategories[0])
+export function TransactionForm({ initial, knownCategories, onClose, onSave }: TransactionFormProps) {
+  const [type, setType] = useState<TransactionType>(initial?.type ?? 'expense')
+  const [amount, setAmount] = useState(initial ? String(initial.amount) : '')
+  const [category, setCategory] = useState(initial?.category ?? expenseCategories[0])
   const [customCategory, setCustomCategory] = useState('')
-  const [note, setNote] = useState('')
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10))
+  const [note, setNote] = useState(initial?.note ?? '')
+  const [date, setDate] = useState(initial?.occurred_on ?? new Date().toISOString().slice(0, 10))
   const [saving, setSaving] = useState(false)
-  const categories = type === 'expense' ? expenseCategories : incomeCategories
+  const defaultCategories = type === 'expense' ? expenseCategories : incomeCategories
+  const categories = [...new Set([
+    ...defaultCategories,
+    ...(knownCategories?.[type] ?? []),
+    ...(initial?.type === type ? [initial.category] : []),
+  ])]
 
   const changeType = (nextType: TransactionType) => {
     setType(nextType)
@@ -53,7 +60,7 @@ export function TransactionForm({ onClose, onSave }: TransactionFormProps) {
         <header>
           <div>
             <p className="eyebrow">快速记录</p>
-            <h2 id="transaction-title">记一笔</h2>
+            <h2 id="transaction-title">{initial ? '编辑账目' : '记一笔'}</h2>
           </div>
           <button className="icon-button" type="button" onClick={onClose} aria-label="关闭">
             <X size={20} />
@@ -110,7 +117,7 @@ export function TransactionForm({ onClose, onSave }: TransactionFormProps) {
           </label>
 
           <button className="primary-button modal-submit" disabled={saving}>
-            {saving ? '保存中…' : '保存记录'}
+            {saving ? '保存中…' : initial ? '保存修改' : '保存记录'}
           </button>
         </form>
       </section>
