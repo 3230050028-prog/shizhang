@@ -7,6 +7,7 @@ create table if not exists public.transactions (
   type text not null check (type in ('income', 'expense')),
   amount numeric(12, 2) not null check (amount > 0),
   category text not null check (char_length(category) between 1 and 30),
+  account text not null default '未分类' check (char_length(account) between 1 and 30),
   note text not null default '' check (char_length(note) <= 100),
   occurred_on date not null default current_date,
   created_at timestamptz not null default now(),
@@ -109,3 +110,28 @@ insert into public.categories (user_id, type, name)
 select distinct user_id, type, category
 from public.transactions
 on conflict (user_id, type, name) do nothing;
+
+-- 保存用户使用过的支付账户，供后续记账和筛选复用。
+create table if not exists public.accounts (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  name text not null check (char_length(name) between 1 and 30),
+  created_at timestamptz not null default now(),
+  unique (user_id, name)
+);
+
+alter table public.accounts enable row level security;
+revoke all on table public.accounts from anon;
+grant select, insert, update, delete on table public.accounts to authenticated;
+
+drop policy if exists "users_manage_own_accounts" on public.accounts;
+create policy "users_manage_own_accounts"
+  on public.accounts for all
+  to authenticated
+  using ((select auth.uid()) = user_id)
+  with check ((select auth.uid()) = user_id);
+
+insert into public.accounts (user_id, name)
+select distinct user_id, account
+from public.transactions
+on conflict (user_id, name) do nothing;

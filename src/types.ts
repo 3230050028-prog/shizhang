@@ -6,6 +6,7 @@ export interface Transaction {
   type: TransactionType
   amount: number
   category: string
+  account: string
   note: string
   occurred_on: string
   created_at?: string
@@ -15,6 +16,7 @@ export interface TransactionInput {
   type: TransactionType
   amount: number
   category: string
+  account: string
   note: string
   occurred_on: string
 }
@@ -32,6 +34,13 @@ export interface SavedCategory {
   id: string
   user_id?: string
   type: TransactionType
+  name: string
+  created_at?: string
+}
+
+export interface SavedAccount {
+  id: string
+  user_id?: string
   name: string
   created_at?: string
 }

@@ -14,6 +14,8 @@ export const expenseCategories = [
 
 export const incomeCategories = ['工资', '奖金', '理财', '兼职', '红包', '其他']
 
+export const defaultAccounts = ['微信', '支付宝', '现金', '银行卡', '其他']
+
 const today = new Date()
 const dateInCurrentMonth = (day: number) => {
   const date = new Date(today.getFullYear(), today.getMonth(), day)
@@ -26,6 +28,7 @@ export const demoTransactions: Transaction[] = [
     type: 'income',
     amount: 12800,
     category: '工资',
+    account: '银行卡',
     note: '本月工资',
     occurred_on: dateInCurrentMonth(2),
   },
@@ -34,6 +37,7 @@ export const demoTransactions: Transaction[] = [
     type: 'expense',
     amount: 168,
     category: '餐饮',
+    account: '微信',
     note: '周末聚餐',
     occurred_on: dateInCurrentMonth(6),
   },
@@ -42,6 +46,7 @@ export const demoTransactions: Transaction[] = [
     type: 'expense',
     amount: 32.5,
     category: '交通',
+    account: '支付宝',
     note: '打车',
     occurred_on: dateInCurrentMonth(8),
   },
@@ -50,6 +55,7 @@ export const demoTransactions: Transaction[] = [
     type: 'expense',
     amount: 459,
     category: '购物',
+    account: '银行卡',
     note: '生活用品',
     occurred_on: dateInCurrentMonth(11),
   },
@@ -58,6 +64,7 @@ export const demoTransactions: Transaction[] = [
     type: 'expense',
     amount: 88,
     category: '娱乐',
+    account: '微信',
     note: '电影',
     occurred_on: dateInCurrentMonth(14),
   },

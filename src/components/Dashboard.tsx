@@ -23,6 +23,7 @@ import {
   ReceiptText,
   Search,
   ShoppingBag,
+  SlidersHorizontal,
   Trash2,
   TrendingUp,
   Utensils,
@@ -33,7 +34,7 @@ import {
 import { categoryColors } from '../data'
 import { escapeCsv } from '../lib/csv'
 import { toLocalMonth } from '../lib/date'
-import type { ActionResult, Budget, SavedCategory, Transaction, TransactionInput } from '../types'
+import type { ActionResult, Budget, SavedAccount, SavedCategory, Transaction, TransactionInput, TransactionType } from '../types'
 import { BudgetForm } from './BudgetForm'
 import { TransactionForm } from './TransactionForm'
 
@@ -43,6 +44,7 @@ interface DashboardProps {
   transactions: Transaction[]
   budgets: Budget[]
   savedCategories: SavedCategory[]
+  savedAccounts: SavedAccount[]
   email?: string
   demo?: boolean
   loading?: boolean
@@ -82,6 +84,7 @@ export function Dashboard({
   transactions,
   budgets,
   savedCategories,
+  savedAccounts,
   email,
   demo,
   loading,
@@ -99,6 +102,9 @@ export function Dashboard({
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [month, setMonth] = useState(toLocalMonth())
+  const [typeFilter, setTypeFilter] = useState<'all' | TransactionType>('all')
+  const [categoryFilter, setCategoryFilter] = useState('all')
+  const [accountFilter, setAccountFilter] = useState('all')
   const [operationError, setOperationError] = useState('')
 
   const monthTransactions = useMemo(
@@ -108,11 +114,23 @@ export function Dashboard({
 
   const visibleTransactions = useMemo(() => {
     const normalized = query.trim().toLowerCase()
-    if (!normalized) return monthTransactions
-    return monthTransactions.filter((item) =>
-      `${item.category} ${item.note}`.toLowerCase().includes(normalized),
-    )
-  }, [monthTransactions, query])
+    return monthTransactions.filter((item) => {
+      if (typeFilter !== 'all' && item.type !== typeFilter) return false
+      if (categoryFilter !== 'all' && item.category !== categoryFilter) return false
+      if (accountFilter !== 'all' && item.account !== accountFilter) return false
+      return !normalized || `${item.category} ${item.account} ${item.note}`.toLowerCase().includes(normalized)
+    })
+  }, [accountFilter, categoryFilter, monthTransactions, query, typeFilter])
+
+  const availableCategories = useMemo(
+    () => [...new Set(monthTransactions.map((item) => item.category))].sort((a, b) => a.localeCompare(b, 'zh-CN')),
+    [monthTransactions],
+  )
+
+  const availableAccounts = useMemo(
+    () => [...new Set(monthTransactions.map((item) => item.account || '未分类'))].sort((a, b) => a.localeCompare(b, 'zh-CN')),
+    [monthTransactions],
+  )
 
   const income = monthTransactions
     .filter((item) => item.type === 'income')
@@ -137,6 +155,11 @@ export function Dashboard({
     ])],
   }), [savedCategories, transactions])
 
+  const knownAccounts = useMemo(() => [...new Set([
+    ...savedAccounts.map((item) => item.name),
+    ...transactions.map((item) => item.account || '未分类'),
+  ])], [savedAccounts, transactions])
+
   const chartData = useMemo(() => {
     const totals = new Map<string, number>()
     monthTransactions
@@ -151,11 +174,12 @@ export function Dashboard({
 
   const exportCsv = () => {
     const rows = [
-      ['日期', '类型', '分类', '金额', '备注'],
+      ['日期', '类型', '分类', '支付账户', '金额', '备注'],
       ...visibleTransactions.map((item) => [
         item.occurred_on,
         item.type === 'income' ? '收入' : '支出',
         item.category,
+        item.account || '未分类',
         item.amount,
         item.note,
       ]),
@@ -173,6 +197,21 @@ export function Dashboard({
     const result = await onDelete(id)
     if (!result.ok) setOperationError(result.error ?? '删除失败，请稍后重试。')
   }
+
+  const resetFilters = () => {
+    setQuery('')
+    setTypeFilter('all')
+    setCategoryFilter('all')
+    setAccountFilter('all')
+  }
+
+  const changeMonth = (nextMonth: string) => {
+    setMonth(nextMonth)
+    setCategoryFilter('all')
+    setAccountFilter('all')
+  }
+
+  const hasFilters = Boolean(query.trim()) || typeFilter !== 'all' || categoryFilter !== 'all' || accountFilter !== 'all'
 
   const displayMonth = new Intl.DateTimeFormat('zh-CN', {
     year: 'numeric',
@@ -224,7 +263,7 @@ export function Dashboard({
 
         <section className="dashboard-toolbar">
           <label className="month-picker">
-            <input type="month" value={month} onChange={(event) => setMonth(event.target.value)} />
+            <input type="month" value={month} onChange={(event) => changeMonth(event.target.value)} />
             <span>{displayMonth}<ChevronDown size={16} /></span>
           </label>
           <button className="secondary-button" onClick={exportCsv}><Download size={17} />导出本月</button>
@@ -280,8 +319,26 @@ export function Dashboard({
         <section className="panel records-panel" id="records">
           <header className="panel-header records-header">
             <div><p className="eyebrow">逐笔回顾</p><h2>本月明细</h2></div>
-            <label className="search-box"><Search size={17} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索分类或备注" /></label>
+            <label className="search-box"><Search size={17} /><input aria-label="搜索账目" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索分类、账户或备注" /></label>
           </header>
+          <div className="records-filterbar">
+            <span className="filter-label"><SlidersHorizontal size={15} />筛选</span>
+            <select value={typeFilter} onChange={(event) => setTypeFilter(event.target.value as 'all' | TransactionType)} aria-label="按收支类型筛选">
+              <option value="all">全部收支</option>
+              <option value="expense">只看支出</option>
+              <option value="income">只看收入</option>
+            </select>
+            <select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)} aria-label="按分类筛选">
+              <option value="all">全部分类</option>
+              {availableCategories.map((item) => <option key={item} value={item}>{item}</option>)}
+            </select>
+            <select value={accountFilter} onChange={(event) => setAccountFilter(event.target.value)} aria-label="按支付账户筛选">
+              <option value="all">全部账户</option>
+              {availableAccounts.map((item) => <option key={item} value={item}>{item}</option>)}
+            </select>
+            <span className="filter-result">显示 {visibleTransactions.length} / {monthTransactions.length} 笔</span>
+            {hasFilters && <button className="clear-filters" type="button" onClick={resetFilters}>清除筛选</button>}
+          </div>
           {loading ? <p className="loading-text">正在读取账目…</p> : visibleTransactions.length ? (
             <div className="transaction-list">
               {visibleTransactions.map((item) => {
@@ -289,7 +346,7 @@ export function Dashboard({
                 return (
                   <div className="transaction-row" key={item.id}>
                     <span className="category-icon" style={{ color: categoryColors[item.category] ?? '#6d7a72', background: `${categoryColors[item.category] ?? '#6d7a72'}18` }}><Icon size={19} /></span>
-                    <span className="transaction-copy"><b>{item.note || item.category}</b><small>{item.category} · {formatDate(item.occurred_on)}</small></span>
+                    <span className="transaction-copy"><b>{item.note || item.category}</b><small>{item.category} · {item.account || '未分类'} · {formatDate(item.occurred_on)}</small></span>
                     <strong className={item.type}>{item.type === 'income' ? '+' : '-'}{money.format(Number(item.amount))}</strong>
                     <span className="transaction-actions">
                       <button className="icon-button edit-button" onClick={() => setEditingTransaction(item)} aria-label="编辑记录"><Pencil size={15} /></button>
@@ -299,7 +356,7 @@ export function Dashboard({
                 )
               })}
             </div>
-          ) : <EmptyState text={query ? '没有找到相关记录' : '本月还没有账目'} onAdd={() => setShowForm(true)} />}
+          ) : <EmptyState text={hasFilters ? '没有找到符合筛选条件的记录' : '本月还没有账目'} onAdd={() => setShowForm(true)} />}
         </section>
       </main>
 
@@ -308,6 +365,7 @@ export function Dashboard({
         <TransactionForm
           initial={editingTransaction ?? undefined}
           knownCategories={knownCategories}
+          knownAccounts={knownAccounts}
           onClose={() => { setShowForm(false); setEditingTransaction(null) }}
           onSave={(input) => editingTransaction ? onUpdate(editingTransaction.id, input) : onAdd(input)}
         />

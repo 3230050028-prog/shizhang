@@ -6,17 +6,34 @@ import { PasswordRecovery } from './components/PasswordRecovery'
 import { demoTransactions } from './data'
 import { toLocalMonth } from './lib/date'
 import { isSupabaseConfigured, supabase } from './lib/supabase'
-import type { ActionResult, Budget, SavedCategory, Transaction, TransactionInput } from './types'
+import type { ActionResult, Budget, SavedAccount, SavedCategory, Transaction, TransactionInput } from './types'
 
 const demoStorageKey = 'shizhang-demo-transactions'
 const demoBudgetStorageKey = 'shizhang-demo-budgets'
+const demoAccountStorageKey = 'shizhang-demo-accounts'
+
+const normalizeTransaction = (transaction: Transaction): Transaction => ({
+  ...transaction,
+  account: transaction.account || '未分类',
+})
 
 function loadDemoTransactions() {
   try {
     const stored = localStorage.getItem(demoStorageKey)
-    return stored ? (JSON.parse(stored) as Transaction[]) : demoTransactions
+    return stored
+      ? (JSON.parse(stored) as Transaction[]).map(normalizeTransaction)
+      : demoTransactions
   } catch {
     return demoTransactions
+  }
+}
+
+function loadDemoAccounts(): SavedAccount[] {
+  try {
+    const stored = localStorage.getItem(demoAccountStorageKey)
+    return stored ? JSON.parse(stored) as SavedAccount[] : []
+  } catch {
+    return []
   }
 }
 
@@ -60,6 +77,9 @@ function App() {
     isSupabaseConfigured ? [] : loadDemoBudgets(),
   )
   const [savedCategories, setSavedCategories] = useState<SavedCategory[]>([])
+  const [savedAccounts, setSavedAccounts] = useState<SavedAccount[]>(() =>
+    isSupabaseConfigured ? [] : loadDemoAccounts(),
+  )
 
   useEffect(() => {
     if (!supabase) return
@@ -79,6 +99,7 @@ function App() {
         setTransactions([])
         setBudgets([])
         setSavedCategories([])
+        setSavedAccounts([])
       }
     })
 
@@ -94,22 +115,28 @@ function App() {
   }, [budgets])
 
   useEffect(() => {
+    if (!isSupabaseConfigured) localStorage.setItem(demoAccountStorageKey, JSON.stringify(savedAccounts))
+  }, [savedAccounts])
+
+  useEffect(() => {
     if (!session || !supabase) return
 
     let active = true
     void (async () => {
       try {
-        const [transactionResult, budgetResult, categoryResult] = await Promise.all([
+        const [transactionResult, budgetResult, categoryResult, accountResult] = await Promise.all([
           supabase.from('transactions').select('*').order('occurred_on', { ascending: false }),
           supabase.from('budgets').select('*').order('month', { ascending: false }),
           supabase.from('categories').select('*').order('name'),
+          supabase.from('accounts').select('*').order('name'),
         ])
         if (!active) return
         if (transactionResult.error) throw transactionResult.error
         if (budgetResult.error) throw budgetResult.error
-        setTransactions((transactionResult.data as Transaction[] | null) ?? [])
+        setTransactions(((transactionResult.data as Transaction[] | null) ?? []).map(normalizeTransaction))
         setBudgets((budgetResult.data as Budget[] | null) ?? [])
         setSavedCategories(categoryResult.error ? [] : (categoryResult.data as SavedCategory[] | null) ?? [])
+        setSavedAccounts(accountResult.error ? [] : (accountResult.data as SavedAccount[] | null) ?? [])
         setLoadError('')
       } catch (error) {
         if (active) setLoadError(errorMessage(error))
@@ -145,6 +172,33 @@ function App() {
     }
   }
 
+  const persistAccount = async (input: TransactionInput) => {
+    const existing = savedAccounts.find((item) => item.name === input.account)
+    if (existing) return
+    if (!supabase || !session) {
+      setSavedAccounts((current) => [{ id: crypto.randomUUID(), name: input.account }, ...current])
+      return
+    }
+    try {
+      const { data, error } = await supabase
+        .from('accounts')
+        .upsert(
+          { user_id: session.user.id, name: input.account },
+          { onConflict: 'user_id,name' },
+        )
+        .select()
+        .single()
+      if (!error && data) {
+        setSavedAccounts((current) => [
+          data as SavedAccount,
+          ...current.filter((item) => item.name !== input.account),
+        ])
+      }
+    } catch {
+      // Account persistence is an enhancement; the transaction itself remains valid.
+    }
+  }
+
   const addTransaction = async (input: TransactionInput): Promise<ActionResult> => {
     if (!supabase || !session) {
       setTransactions((current) => [
@@ -156,6 +210,7 @@ function App() {
         ...current,
       ])
       await persistCategory(input)
+      await persistAccount(input)
       return { ok: true }
     }
 
@@ -168,6 +223,7 @@ function App() {
       if (error) return failure('保存失败', error)
       setTransactions((current) => [data as Transaction, ...current])
       await persistCategory(input)
+      await persistAccount(input)
       return { ok: true }
     } catch (error) {
       return failure('保存失败', error)
@@ -178,6 +234,7 @@ function App() {
     if (!supabase || !session) {
       setTransactions((current) => current.map((item) => item.id === id ? { ...item, ...input } : item))
       await persistCategory(input)
+      await persistAccount(input)
       return { ok: true }
     }
 
@@ -191,6 +248,7 @@ function App() {
       if (error) return failure('更新失败', error)
       setTransactions((current) => current.map((item) => item.id === id ? data as Transaction : item))
       await persistCategory(input)
+      await persistAccount(input)
       return { ok: true }
     } catch (error) {
       return failure('更新失败', error)
@@ -258,6 +316,7 @@ function App() {
       transactions={transactions}
       budgets={budgets}
       savedCategories={savedCategories}
+      savedAccounts={savedAccounts}
       email={session?.user.email}
       demo={!isSupabaseConfigured}
       loading={dataLoading}

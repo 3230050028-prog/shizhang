@@ -1,21 +1,24 @@
 import { useState, type FormEvent } from 'react'
 import { X } from 'lucide-react'
-import { expenseCategories, incomeCategories } from '../data'
+import { defaultAccounts, expenseCategories, incomeCategories } from '../data'
 import { toLocalDate } from '../lib/date'
 import type { ActionResult, TransactionInput, TransactionType } from '../types'
 
 interface TransactionFormProps {
   initial?: TransactionInput
   knownCategories?: Record<TransactionType, string[]>
+  knownAccounts?: string[]
   onClose: () => void
   onSave: (input: TransactionInput) => Promise<ActionResult>
 }
 
-export function TransactionForm({ initial, knownCategories, onClose, onSave }: TransactionFormProps) {
+export function TransactionForm({ initial, knownCategories, knownAccounts, onClose, onSave }: TransactionFormProps) {
   const [type, setType] = useState<TransactionType>(initial?.type ?? 'expense')
   const [amount, setAmount] = useState(initial ? String(initial.amount) : '')
   const [category, setCategory] = useState(initial?.category ?? expenseCategories[0])
   const [customCategory, setCustomCategory] = useState('')
+  const [account, setAccount] = useState(initial?.account ?? defaultAccounts[0])
+  const [customAccount, setCustomAccount] = useState('')
   const [note, setNote] = useState(initial?.note ?? '')
   const [date, setDate] = useState(initial?.occurred_on ?? toLocalDate())
   const [saving, setSaving] = useState(false)
@@ -25,6 +28,11 @@ export function TransactionForm({ initial, knownCategories, onClose, onSave }: T
     ...defaultCategories,
     ...(knownCategories?.[type] ?? []),
     ...(initial?.type === type ? [initial.category] : []),
+  ])]
+  const accounts = [...new Set([
+    ...defaultAccounts,
+    ...(knownAccounts ?? []),
+    ...(initial?.account ? [initial.account] : []),
   ])]
 
   const changeType = (nextType: TransactionType) => {
@@ -44,6 +52,7 @@ export function TransactionForm({ initial, knownCategories, onClose, onSave }: T
       type,
       amount: numericAmount,
       category: category === '自定义' ? customCategory.trim() || '其他' : category,
+      account: account === '自定义账户' ? customAccount.trim() || '其他' : account,
       note: note.trim(),
       occurred_on: date,
     })
@@ -115,6 +124,21 @@ export function TransactionForm({ initial, knownCategories, onClose, onSave }: T
             <label>
               自定义分类
               <input value={customCategory} onChange={(event) => setCustomCategory(event.target.value)} placeholder="例如：宠物" maxLength={12} required />
+            </label>
+          )}
+
+          <label>
+            支付账户
+            <select value={account} onChange={(event) => setAccount(event.target.value)}>
+              {accounts.map((item) => <option key={item}>{item}</option>)}
+              <option>自定义账户</option>
+            </select>
+          </label>
+
+          {account === '自定义账户' && (
+            <label>
+              自定义账户
+              <input value={customAccount} onChange={(event) => setCustomAccount(event.target.value)} placeholder="例如：招商银行卡" maxLength={30} required />
             </label>
           )}
 
