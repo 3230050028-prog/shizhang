@@ -21,6 +21,8 @@
 - 按月、收支类型、分类和支付账户组合筛选
 - 导出的 CSV 包含支付账户
 - 响应式手机界面
+- 可安装到 iPhone、Android 和电脑桌面的 PWA
+- 独立全屏启动、离线页面和安全的版本更新提示
 - 未配置数据库时自动进入演示模式
 
 ## 本地启动
@@ -43,6 +45,15 @@ npm run dev
 如果项目已经运行过早期版本的 `schema.sql`，请再在 SQL Editor 中运行 `supabase/migrations/002_reliability.sql`。它会增加分类持久化和账目更新时间，不会删除已有数据。
 
 升级到 v0.3 时，请继续运行 `supabase/migrations/003_accounts.sql`。运行前确认 SQL Editor 顶部选择的是 **Database**，而不是 Logs。已有账目会自动归入“未分类”账户，不会被删除。
+
+## 安装到手机桌面
+
+拾账部署到 HTTPS 网址后可以像普通 App 一样安装，不需要经过应用商店。
+
+- iPhone：使用 Safari 打开拾账，点击“分享”，选择“添加到主屏幕”，并开启“作为网页 App 打开”。
+- Android：使用 Chrome 打开拾账，点击右上角菜单，选择“安装应用”。
+
+安装后可以从桌面图标独立全屏启动。基础页面可离线打开，但登录和云端账目同步仍需要网络。
 
 不要把 `.env.local`、Secret key 或 Service role key 上传到 GitHub。前端只能使用 Publishable key。
 

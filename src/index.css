@@ -277,6 +277,16 @@ a { color: inherit; text-decoration: none; }
 .app-loading { display: grid; place-items: center; align-content: center; min-height: 100vh; gap: 14px; color: var(--muted); }
 .app-loading p { margin: 0; font-size: 13px; }
 
+/* PWA install, update and connection notices */
+.network-banner { position: fixed; top: 14px; left: 50%; z-index: 65; display: flex; align-items: center; gap: 8px; max-width: calc(100% - 28px); padding: 9px 13px; color: #7d4b35; border: 1px solid #f0cfbd; border-radius: 11px; background: #fff6ed; box-shadow: 0 10px 30px rgba(71,46,34,.12); font-size: 11px; transform: translateX(-50%); }
+.pwa-toast { position: fixed; right: 24px; bottom: 24px; z-index: 45; display: grid; grid-template-columns: 42px minmax(0, 1fr) auto; align-items: center; gap: 12px; width: min(440px, calc(100% - 32px)); padding: 15px 16px; color: var(--ink); border: 1px solid #dbe5dd; border-radius: 16px; background: rgba(255,255,255,.97); box-shadow: 0 20px 55px rgba(26,55,38,.18); backdrop-filter: blur(10px); }
+.pwa-toast-icon { display: grid; place-items: center; width: 42px; height: 42px; color: var(--green-700); border-radius: 13px; background: var(--green-50); }
+.pwa-toast strong { display: block; margin-bottom: 4px; font-size: 13px; }
+.pwa-toast p { margin: 0; color: var(--muted); font-size: 10px; line-height: 1.55; }
+.pwa-action { min-height: 34px; padding: 0 11px; color: white; border: 0; border-radius: 9px; background: var(--green-700); font-size: 10px; font-weight: 700; white-space: nowrap; }
+.pwa-action:hover { background: var(--green-800); }
+.pwa-toast-close { position: absolute; top: -8px; right: -8px; display: grid; place-items: center; width: 27px; height: 27px; padding: 0; color: #77847c; border: 1px solid var(--line); border-radius: 50%; background: white; box-shadow: 0 5px 15px rgba(33,54,42,.1); }
+
 @media (max-width: 1050px) {
   .sidebar { width: 220px; }
   .dashboard { width: calc(100% - 220px); margin-left: 220px; }
@@ -326,6 +336,10 @@ a { color: inherit; text-decoration: none; }
   .transaction-actions { grid-column: 2 / -1; }
   .delete-button, .edit-button { opacity: 1; }
   .mobile-add { display: grid; }
+  .pwa-toast { right: 16px; bottom: 88px; grid-template-columns: 38px minmax(0, 1fr); padding: 14px; }
+  .pwa-toast-icon { width: 38px; height: 38px; }
+  .pwa-action { grid-column: 1 / -1; width: 100%; }
+  .network-banner { top: 9px; width: calc(100% - 24px); justify-content: center; }
 }
 
 @media (max-width: 430px) {
