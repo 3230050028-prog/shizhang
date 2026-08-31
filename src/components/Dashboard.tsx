@@ -23,6 +23,7 @@ import {
   ReceiptText,
   Search,
   ShoppingBag,
+  Sparkles,
   SlidersHorizontal,
   Trash2,
   TrendingUp,
@@ -260,7 +261,7 @@ export function Dashboard({
           <div className="topbar-actions">
             {demo && <span className="demo-badge">演示模式</span>}
             <button className="icon-button" aria-label="通知"><Bell size={20} /></button>
-            <button className="primary-button" onClick={() => setShowForm(true)}><Plus size={18} />记一笔</button>
+            <button className="primary-button" onClick={() => setShowForm(true)}><Sparkles size={18} />智能记账</button>
           </div>
         </header>
 
@@ -366,7 +367,7 @@ export function Dashboard({
         </section>
       </main>
 
-      <button className="mobile-add" onClick={() => setShowForm(true)} aria-label="记一笔"><Plus size={24} /></button>
+      <button className="mobile-add" onClick={() => setShowForm(true)} aria-label="智能记账"><Plus size={24} /></button>
       {(showForm || editingTransaction) && (
         <TransactionForm
           initial={editingTransaction ?? undefined}

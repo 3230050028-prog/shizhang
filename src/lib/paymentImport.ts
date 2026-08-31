@@ -56,14 +56,17 @@ const cleanAmount = (value: string) => {
   return match ? Math.abs(Number(match[0])) : 0
 }
 
-const inferCategory = (value: string, type: TransactionType) => {
+export const inferTransactionCategory = (value: string, type: TransactionType) => {
   if (type === 'income') {
-    if (/工资|薪资|奖金/.test(value)) return '工资'
+    if (/工资|薪资/.test(value)) return '工资'
+    if (/奖金|年终奖/.test(value)) return '奖金'
+    if (/兼职|稿费|副业/.test(value)) return '兼职'
+    if (/红包/.test(value)) return '红包'
     if (/理财|基金|利息|收益/.test(value)) return '理财'
-    return '其他收入'
+    return '其他'
   }
 
-  if (/餐饮|美食|饭|餐厅|外卖|奶茶|咖啡|超市/.test(value)) return '餐饮'
+  if (/餐饮|美食|饭|餐厅|外卖|奶茶|咖啡|超市|星巴克|瑞幸|肯德基|麦当劳/.test(value)) return '餐饮'
   if (/交通|出行|打车|公交|地铁|加油|停车|车票/.test(value)) return '交通'
   if (/购物|百货|服饰|数码|淘宝|京东|拼多多/.test(value)) return '购物'
   if (/居住|住房|房租|物业|水费|电费|燃气/.test(value)) return '居住'
@@ -131,7 +134,7 @@ export const parsePaymentStatement = (text: string): PaymentImportResult => {
       sourceLine: headerIndex + offset + 2,
       type,
       amount,
-      category: inferCategory(`${originalCategory} ${note}`, type),
+      category: inferTransactionCategory(`${originalCategory} ${note}`, type),
       account,
       note,
       occurred_on,

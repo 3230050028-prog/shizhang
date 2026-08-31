@@ -258,6 +258,22 @@ a { color: inherit; text-decoration: none; }
 .transaction-modal header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 22px; }
 .transaction-modal h2 { margin: 0; font-family: 'Noto Serif SC', serif; font-size: 25px; }
 .transaction-modal form { display: grid; gap: 17px; }
+.smart-entry { display: grid; gap: 10px; padding: 14px; border: 1px solid #dbe7dd; border-radius: 14px; background: linear-gradient(145deg, #f7fbf8, #eef5f0); }
+.smart-entry-title { display: flex; align-items: center; gap: 10px; }
+.smart-entry-title > span { display: grid; flex: 0 0 auto; place-items: center; width: 32px; height: 32px; color: var(--green-700); border-radius: 10px; background: white; box-shadow: 0 4px 12px rgba(40,84,58,.08); }
+.smart-entry-title b, .smart-entry-title small { display: block; }
+.smart-entry-title b { color: var(--ink); font-size: 13px; }
+.smart-entry-title small { margin-top: 2px; color: var(--muted); font-size: 10px; line-height: 1.4; }
+.smart-entry textarea { width: 100%; min-height: 74px; padding: 11px 12px; resize: vertical; color: var(--ink); outline: 0; border: 1px solid #d6e1d8; border-radius: 10px; background: rgba(255,255,255,.9); font: inherit; font-size: 12px; line-height: 1.55; }
+.smart-entry textarea:focus { border-color: #80a88e; box-shadow: 0 0 0 3px rgba(62,123,91,.09); }
+.smart-entry-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.smart-entry-actions button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 36px; padding: 0 10px; border-radius: 9px; font-size: 11px; font-weight: 700; }
+.smart-apply { color: white; border: 0; background: var(--green-700); }
+.smart-apply:hover { background: var(--green-800); }
+.smart-success { margin: 0; padding: 9px 10px; color: #2f6f4d; border-radius: 8px; background: #e4f1e8; font-size: 10px; line-height: 1.5; }
+.smart-entry .inline-error { margin: 0; }
+.smart-privacy { display: flex; align-items: center; gap: 5px; margin: 0; color: #7d8b82; font-size: 9px; line-height: 1.4; }
+.smart-privacy svg { flex: 0 0 auto; color: var(--green-600); }
 .type-switch { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; padding: 4px; border-radius: 12px; background: #f2f4f1; }
 .type-switch button { height: 37px; color: var(--muted); border: 0; border-radius: 9px; background: transparent; font-size: 13px; font-weight: 600; }
 .type-switch button.active { background: white; box-shadow: 0 3px 10px rgba(44,62,51,.08); }
@@ -376,5 +392,6 @@ a { color: inherit; text-decoration: none; }
   .chart-legend { grid-template-columns: 1fr; gap: 10px; }
   .form-grid { grid-template-columns: 1fr; }
   .transaction-modal { padding: 22px 18px; }
+  .smart-entry-actions { grid-template-columns: 1fr; }
   .transaction-row > strong { font-size: 12px; }
 }

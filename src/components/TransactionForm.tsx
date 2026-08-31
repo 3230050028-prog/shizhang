@@ -1,7 +1,8 @@
 import { useState, type FormEvent } from 'react'
-import { X } from 'lucide-react'
+import { ClipboardPaste, ShieldCheck, Sparkles, X } from 'lucide-react'
 import { defaultAccounts, expenseCategories, incomeCategories } from '../data'
 import { toLocalDate } from '../lib/date'
+import { parseQuickEntry } from '../lib/quickEntry'
 import type { ActionResult, TransactionInput, TransactionType } from '../types'
 
 interface TransactionFormProps {
@@ -23,6 +24,9 @@ export function TransactionForm({ initial, knownCategories, knownAccounts, onClo
   const [date, setDate] = useState(initial?.occurred_on ?? toLocalDate())
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [smartText, setSmartText] = useState('')
+  const [smartMessage, setSmartMessage] = useState('')
+  const [smartError, setSmartError] = useState('')
   const defaultCategories = type === 'expense' ? expenseCategories : incomeCategories
   const categories = [...new Set([
     ...defaultCategories,
@@ -39,6 +43,37 @@ export function TransactionForm({ initial, knownCategories, knownAccounts, onClo
     setType(nextType)
     setCategory(nextType === 'expense' ? expenseCategories[0] : incomeCategories[0])
     setCustomCategory('')
+  }
+
+  const applySmartText = (text = smartText) => {
+    setSmartError('')
+    setSmartMessage('')
+    try {
+      const result = parseQuickEntry(text, account)
+      setType(result.input.type)
+      setAmount(String(result.input.amount))
+      setCategory(result.input.category)
+      setAccount(result.input.account)
+      setNote(result.input.note)
+      setDate(result.input.occurred_on)
+      setSmartMessage(`已识别：${result.recognized.join(' · ')}。请检查后保存。`)
+    } catch (reason) {
+      setSmartError(reason instanceof Error ? reason.message : '识别失败，请调整文字后重试。')
+    }
+  }
+
+  const pasteFromClipboard = async () => {
+    setSmartError('')
+    try {
+      const text = await navigator.clipboard.readText()
+      if (!text.trim()) throw new Error('剪贴板中没有文字。')
+      setSmartText(text)
+      applySmartText(text)
+    } catch (reason) {
+      setSmartError(reason instanceof Error && reason.message === '剪贴板中没有文字。'
+        ? reason.message
+        : '浏览器不允许自动读取剪贴板，请长按输入框后选择“粘贴”。')
+    }
   }
 
   const submit = async (event: FormEvent) => {
@@ -84,6 +119,28 @@ export function TransactionForm({ initial, knownCategories, knownAccounts, onClo
         </header>
 
         <form onSubmit={submit}>
+          {!initial && (
+            <section className="smart-entry">
+              <div className="smart-entry-title">
+                <span><Sparkles size={17} /></span>
+                <div><b>半自动记账</b><small>粘贴支付通知或输入一句话，自动填好下面的表单</small></div>
+              </div>
+              <textarea
+                value={smartText}
+                onChange={(event) => setSmartText(event.target.value)}
+                placeholder="例如：今天午饭35元，微信支付"
+                rows={3}
+              />
+              <div className="smart-entry-actions">
+                <button className="secondary-button" type="button" onClick={() => void pasteFromClipboard()}><ClipboardPaste size={15} />粘贴通知</button>
+                <button className="smart-apply" type="button" onClick={() => applySmartText()}><Sparkles size={15} />识别并填入</button>
+              </div>
+              {smartMessage && <p className="smart-success">{smartMessage}</p>}
+              {smartError && <p className="inline-error">{smartError}</p>}
+              <p className="smart-privacy"><ShieldCheck size={13} />文字只在当前设备处理，不会发送给AI或第三方。</p>
+            </section>
+          )}
+
           <div className="type-switch">
             <button
               type="button"
