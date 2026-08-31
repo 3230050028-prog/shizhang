@@ -21,6 +21,17 @@ const extractAmount = (text: string) => {
 }
 
 const extractDate = (text: string, now: Date) => {
+  const relativeDate = new Date(now)
+  if (/(?:今天|今日|今晚|今早|今晨|今夜)/.test(text)) return toLocalDate(relativeDate)
+  if (text.includes('前天')) {
+    relativeDate.setDate(relativeDate.getDate() - 2)
+    return toLocalDate(relativeDate)
+  }
+  if (text.includes('昨天')) {
+    relativeDate.setDate(relativeDate.getDate() - 1)
+    return toLocalDate(relativeDate)
+  }
+
   const full = text.match(/(20\d{2})[-/.年](\d{1,2})[-/.月](\d{1,2})/)
   if (full) return `${full[1]}-${full[2].padStart(2, '0')}-${full[3].padStart(2, '0')}`
 
@@ -29,10 +40,7 @@ const extractDate = (text: string, now: Date) => {
     return toLocalDate(new Date(now.getFullYear(), Number(monthDay[1]) - 1, Number(monthDay[2])))
   }
 
-  const date = new Date(now)
-  if (text.includes('前天')) date.setDate(date.getDate() - 2)
-  else if (text.includes('昨天')) date.setDate(date.getDate() - 1)
-  return toLocalDate(date)
+  return toLocalDate(relativeDate)
 }
 
 const extractType = (text: string): TransactionType =>
@@ -54,7 +62,7 @@ const cleanNote = (text: string) => {
   let note = labeled?.[1] ?? text
   note = note
     .replace(/20\d{2}[-/.年]\d{1,2}[-/.月]\d{1,2}(?:日)?(?:\s+\d{1,2}:\d{2}(?::\d{2})?)?/g, ' ')
-    .replace(/(?:今天|昨天|前天|刚刚|上午|中午|下午|晚上|凌晨)/g, ' ')
+    .replace(/(?:今天|今日|今晚|今早|今晨|今夜|昨天|前天|刚刚|上午|中午|下午|晚上|凌晨)/g, ' ')
     .replace(/(?:付款金额|支付金额|实付金额|订单金额|交易金额|金额)[：:\s]*(?:¥|￥)?\s*\d+(?:\.\d{1,2})?/gi, ' ')
     .replace(/(?:¥|￥)?\s*\d+(?:\.\d{1,2})?\s*元?/g, ' ')
     .replace(/微信支付|微信|支付宝|花呗|零钱通|零钱|现金|银行卡|信用卡|储蓄卡/g, ' ')

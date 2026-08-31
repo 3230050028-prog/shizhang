@@ -22,7 +22,7 @@ export function TransactionForm({ initial, knownCategories, knownAccounts, onClo
   const [account, setAccount] = useState(initial?.account ?? defaultAccounts[0])
   const [customAccount, setCustomAccount] = useState('')
   const [note, setNote] = useState(initial?.note ?? '')
-  const [date, setDate] = useState(initial?.occurred_on ?? toLocalDate())
+  const [date, setDate] = useState(() => initial?.occurred_on ?? toLocalDate(new Date()))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [smartText, setSmartText] = useState('')
@@ -50,7 +50,7 @@ export function TransactionForm({ initial, knownCategories, knownAccounts, onClo
     setSmartError('')
     setSmartMessage('')
     try {
-      const result = parseQuickEntry(text, account)
+      const result = parseQuickEntry(text, account, new Date())
       setType(result.input.type)
       setAmount(String(result.input.amount))
       setCategory(result.input.category)
