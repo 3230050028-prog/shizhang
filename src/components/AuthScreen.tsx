@@ -21,7 +21,13 @@ export function AuthScreen() {
     try {
       result = mode === 'login'
         ? await supabase.auth.signInWithPassword({ email, password })
-        : await supabase.auth.signUp({ email, password })
+        : await supabase.auth.signUp({
+            email,
+            password,
+            options: {
+              emailRedirectTo: new URL(import.meta.env.BASE_URL, window.location.origin).toString(),
+            },
+          })
     } catch {
       setLoading(false)
       setMessage('网络连接失败，请检查网络后重试。')
