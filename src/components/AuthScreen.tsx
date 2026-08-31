@@ -49,7 +49,7 @@ export function AuthScreen() {
     setMessage('')
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/`,
+        redirectTo: new URL(import.meta.env.BASE_URL, window.location.origin).toString(),
       })
       setMessage(error ? error.message : '重置邮件已发送，请检查邮箱。')
     } catch {
@@ -67,7 +67,7 @@ export function AuthScreen() {
   return (
     <main className="auth-page">
       <section className="auth-story">
-        <a className="brand brand-on-dark" href="/" aria-label="拾账首页">
+        <a className="brand brand-on-dark" href={import.meta.env.BASE_URL} aria-label="拾账首页">
           <span className="brand-mark"><Leaf size={20} /></span>
           <span>拾账</span>
         </a>

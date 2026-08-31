@@ -2,8 +2,12 @@ import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
+const isGitHubPages = process.env.GITHUB_ACTIONS === 'true'
+const base = isGitHubPages ? '/shizhang/' : '/'
+
 // https://vite.dev/config/
 export default defineConfig({
+  base,
   plugins: [
     react(),
     VitePWA({
@@ -14,8 +18,8 @@ export default defineConfig({
         short_name: '拾账',
         description: '简单、安心的个人记账应用',
         lang: 'zh-CN',
-        start_url: '/',
-        scope: '/',
+        start_url: base,
+        scope: base,
         display: 'standalone',
         background_color: '#f5f7f2',
         theme_color: '#2f664a',
