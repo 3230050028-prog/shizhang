@@ -11,9 +11,10 @@ interface TransactionFormProps {
   knownAccounts?: string[]
   onClose: () => void
   onSave: (input: TransactionInput) => Promise<ActionResult>
+  onSaved?: (input: TransactionInput) => void
 }
 
-export function TransactionForm({ initial, knownCategories, knownAccounts, onClose, onSave }: TransactionFormProps) {
+export function TransactionForm({ initial, knownCategories, knownAccounts, onClose, onSave, onSaved }: TransactionFormProps) {
   const [type, setType] = useState<TransactionType>(initial?.type ?? 'expense')
   const [amount, setAmount] = useState(initial ? String(initial.amount) : '')
   const [category, setCategory] = useState(initial?.category ?? expenseCategories[0])
@@ -83,20 +84,27 @@ export function TransactionForm({ initial, knownCategories, knownAccounts, onClo
 
     setSaving(true)
     setError('')
-    const result = await onSave({
+    const input: TransactionInput = {
       type,
       amount: numericAmount,
       category: category === '自定义' ? customCategory.trim() || '其他' : category,
       account: account === '自定义账户' ? customAccount.trim() || '其他' : account,
       note: note.trim(),
       occurred_on: date,
-    })
-    setSaving(false)
-    if (!result.ok) {
-      setError(result.error ?? '保存失败，请稍后重试。')
-      return
     }
-    onClose()
+    try {
+      const result = await onSave(input)
+      if (!result.ok) {
+        setError(result.error ?? '保存失败，请稍后重试。')
+        return
+      }
+      onSaved?.(input)
+      onClose()
+    } catch (reason) {
+      setError(reason instanceof Error ? `保存失败：${reason.message}` : '保存失败，请稍后重试。')
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (

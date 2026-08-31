@@ -6,7 +6,7 @@ import type { ActionResult, Transaction, TransactionInput } from '../types'
 interface PaymentImportProps {
   transactions: Transaction[]
   onClose: () => void
-  onImport: (row: TransactionInput) => Promise<ActionResult>
+  onImport: (rows: TransactionInput[], onProgress?: (completed: number) => void) => Promise<ActionResult>
 }
 
 const money = new Intl.NumberFormat('zh-CN', { style: 'currency', currency: 'CNY' })
@@ -21,6 +21,7 @@ export function PaymentImport({ transactions, onClose, onImport }: PaymentImport
   const [duplicates, setDuplicates] = useState(0)
   const [error, setError] = useState('')
   const [importing, setImporting] = useState(false)
+  const [importProgress, setImportProgress] = useState(0)
   const [imported, setImported] = useState<number | null>(null)
   const existing = useMemo(
     () => new Set(transactions.map(transactionFingerprint)),
@@ -80,19 +81,16 @@ export function PaymentImport({ transactions, onClose, onImport }: PaymentImport
 
   const importRows = async () => {
     setImporting(true)
+    setImportProgress(0)
     setError('')
-    let completed = 0
-    for (const row of rows) {
-      const { sourceLine, ...input } = row
-      const result = await onImport(input)
-      if (!result.ok) {
-        setError(`已导入 ${completed} 笔，第 ${sourceLine} 行失败：${result.error ?? '保存失败'}`)
-        setImporting(false)
-        return
-      }
-      completed += 1
+    const inputs = rows.map(({ sourceLine: _sourceLine, ...input }) => input)
+    const result = await onImport(inputs, setImportProgress)
+    if (!result.ok) {
+      setError(result.error ?? '保存失败，请稍后重试。')
+      setImporting(false)
+      return
     }
-    setImported(completed)
+    setImported(inputs.length)
     setImporting(false)
   }
 
@@ -156,8 +154,14 @@ export function PaymentImport({ transactions, onClose, onImport }: PaymentImport
 
             {error && <p className="inline-error">{error}</p>}
             <p className="import-note">文件会在当前设备中读取，原文件和压缩包密码不会上传。确认导入前不会修改任何数据。</p>
+            {importing && (
+              <div className="import-progress" role="status">
+                <span><i style={{ width: `${rows.length ? (importProgress / rows.length) * 100 : 0}%` }} /></span>
+                <small>正在保存 {importProgress} / {rows.length} 笔，请不要关闭页面</small>
+              </div>
+            )}
             <button className="primary-button modal-submit" disabled={!rows.length || importing} onClick={() => void importRows()}>
-              <Upload size={18} />{importing ? '正在导入…' : `确认导入 ${rows.length} 笔`}
+              <Upload size={18} />{importing ? `正在导入 ${importProgress} / ${rows.length}` : `确认导入 ${rows.length} 笔`}
             </button>
           </>
         )}

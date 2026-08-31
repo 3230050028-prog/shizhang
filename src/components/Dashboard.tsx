@@ -7,7 +7,9 @@ import {
   BriefcaseBusiness,
   Car,
   AlertTriangle,
+  CheckCircle2,
   ChevronDown,
+  ChevronRight,
   CircleEllipsis,
   Clapperboard,
   Download,
@@ -52,6 +54,7 @@ interface DashboardProps {
   demo?: boolean
   loading?: boolean
   onAdd: (input: TransactionInput) => Promise<ActionResult>
+  onAddBatch: (inputs: TransactionInput[], onProgress?: (completed: number) => void) => Promise<ActionResult>
   onUpdate: (id: string, input: TransactionInput) => Promise<ActionResult>
   onDelete: (id: string) => Promise<ActionResult>
   onSaveBudget: (month: string, amount: number) => Promise<ActionResult>
@@ -92,6 +95,7 @@ export function Dashboard({
   demo,
   loading,
   onAdd,
+  onAddBatch,
   onUpdate,
   onDelete,
   onSaveBudget,
@@ -110,6 +114,7 @@ export function Dashboard({
   const [categoryFilter, setCategoryFilter] = useState('all')
   const [accountFilter, setAccountFilter] = useState('all')
   const [operationError, setOperationError] = useState('')
+  const [operationSuccess, setOperationSuccess] = useState('')
 
   const monthTransactions = useMemo(
     () => transactions.filter((item) => item.occurred_on.startsWith(month)),
@@ -215,6 +220,26 @@ export function Dashboard({
     setAccountFilter('all')
   }
 
+  const showTypeDetails = (type: TransactionType) => {
+    setTypeFilter(type)
+    setQuery('')
+    setCategoryFilter('all')
+    setAccountFilter('all')
+    window.history.replaceState(null, '', '#records')
+    window.requestAnimationFrame(() => document.getElementById('records')?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
+  }
+
+  const showSavedRecord = (input: TransactionInput) => {
+    setMonth(input.occurred_on.slice(0, 7))
+    setTypeFilter(input.type)
+    setQuery('')
+    setCategoryFilter('all')
+    setAccountFilter('all')
+    setOperationSuccess(`已保存到 ${input.occurred_on} 的${input.type === 'income' ? '收入' : '支出'}明细中。`)
+    window.setTimeout(() => setOperationSuccess(''), 4000)
+    window.requestAnimationFrame(() => document.getElementById('records')?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
+  }
+
   const hasFilters = Boolean(query.trim()) || typeFilter !== 'all' || categoryFilter !== 'all' || accountFilter !== 'all'
 
   const displayMonth = new Intl.DateTimeFormat('zh-CN', {
@@ -285,19 +310,29 @@ export function Dashboard({
           </div>
         )}
 
+        {operationSuccess && (
+          <div className="success-banner" role="status">
+            <CheckCircle2 size={17} />
+            <span>{operationSuccess}</span>
+            <button onClick={() => setOperationSuccess('')} aria-label="关闭提示"><X size={15} /></button>
+          </div>
+        )}
+
         <section className="summary-grid">
           <article className="summary-card balance-card">
             <span className="summary-icon"><WalletCards size={21} /></span>
             <div><p>本月结余</p><strong>{money.format(balance)}</strong><small>收入减去支出</small></div>
           </article>
-          <article className="summary-card">
+          <button type="button" className="summary-card summary-card-button" onClick={() => showTypeDetails('income')} aria-label="查看本月收入明细">
             <span className="summary-icon income-icon"><ArrowDownLeft size={21} /></span>
             <div><p>本月收入</p><strong>{money.format(income)}</strong><small>{monthTransactions.filter((item) => item.type === 'income').length} 笔收入</small></div>
-          </article>
-          <article className="summary-card">
+            <ChevronRight className="summary-chevron" size={18} />
+          </button>
+          <button type="button" className="summary-card summary-card-button" onClick={() => showTypeDetails('expense')} aria-label="查看本月支出明细">
             <span className="summary-icon expense-icon"><ArrowUpRight size={21} /></span>
             <div><p>本月支出</p><strong>{money.format(expense)}</strong><small>{monthTransactions.filter((item) => item.type === 'expense').length} 笔支出</small></div>
-          </article>
+            <ChevronRight className="summary-chevron" size={18} />
+          </button>
         </section>
 
         <section className="content-grid">
@@ -375,6 +410,7 @@ export function Dashboard({
           knownAccounts={knownAccounts}
           onClose={() => { setShowForm(false); setEditingTransaction(null) }}
           onSave={(input) => editingTransaction ? onUpdate(editingTransaction.id, input) : onAdd(input)}
+          onSaved={showSavedRecord}
         />
       )}
       {showBudgetForm && (
@@ -389,7 +425,7 @@ export function Dashboard({
         <PaymentImport
           transactions={transactions}
           onClose={() => setShowImport(false)}
-          onImport={onAdd}
+          onImport={onAddBatch}
         />
       )}
     </div>

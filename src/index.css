@@ -183,6 +183,9 @@ a { color: inherit; text-decoration: none; }
 .error-banner span { flex: 1; }
 .error-banner button { padding: 5px 8px; color: #914b39; border: 0; border-radius: 7px; background: rgba(255,255,255,.7); font-size: 11px; font-weight: 700; }
 .error-banner .banner-close { display: grid; place-items: center; width: 26px; height: 26px; padding: 0; }
+.success-banner { display: flex; align-items: center; gap: 10px; max-width: 1260px; margin: 0 auto 16px; padding: 11px 13px; color: #286746; border: 1px solid #c9e2d1; border-radius: 11px; background: #edf7f0; font-size: 12px; }
+.success-banner span { flex: 1; }
+.success-banner button { display: grid; place-items: center; width: 26px; height: 26px; padding: 0; color: #286746; border: 0; border-radius: 7px; background: rgba(255,255,255,.72); }
 .month-picker { position: relative; }
 .month-picker input { position: absolute; width: 1px; height: 1px; opacity: 0; }
 .month-picker span { display: inline-flex; align-items: center; gap: 7px; padding: 9px 13px; border: 1px solid var(--line); border-radius: 11px; background: white; font-size: 13px; font-weight: 600; cursor: pointer; }
@@ -200,6 +203,11 @@ a { color: inherit; text-decoration: none; }
 .summary-card strong { display: block; overflow: hidden; color: var(--ink); font-family: 'Noto Serif SC', serif; font-size: clamp(20px, 2vw, 27px); text-overflow: ellipsis; white-space: nowrap; }
 .balance-card strong { color: white; }
 .summary-card small { display: block; margin-top: 5px; font-size: 10px; }
+.summary-card-button { position: relative; width: 100%; color: inherit; text-align: left; }
+.summary-card-button:hover { border-color: #b9cdbf; box-shadow: 0 10px 30px rgba(36,60,45,.08); transform: translateY(-2px); }
+.summary-card-button:focus-visible { outline: 3px solid rgba(62,123,91,.2); outline-offset: 2px; }
+.summary-card-button { transition: border-color .2s ease, box-shadow .2s ease, transform .2s ease; }
+.summary-chevron { flex: 0 0 auto; margin-left: auto; color: #9ba69f; }
 
 .content-grid { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(260px, .85fr); gap: 16px; max-width: 1260px; margin: 0 auto 16px; }
 .panel { border: 1px solid var(--line); border-radius: 18px; background: var(--paper); box-shadow: 0 4px 20px rgba(36,60,45,.025); }
@@ -320,6 +328,10 @@ a { color: inherit; text-decoration: none; }
 .import-preview strong.income { color: #31825b; }
 .import-preview strong.expense { color: #34443b; }
 .import-note { margin: 0 0 13px; color: var(--muted); font-size: 10px; line-height: 1.5; }
+.import-progress { display: grid; gap: 7px; margin: 0 0 13px; }
+.import-progress > span { height: 7px; overflow: hidden; border-radius: 99px; background: #e3eae5; }
+.import-progress i { display: block; height: 100%; border-radius: inherit; background: var(--green-600); transition: width .25s ease; }
+.import-progress small { color: var(--muted); font-size: 10px; text-align: center; }
 .zip-password { display: grid; grid-template-columns: 36px 1fr; gap: 10px; margin: 13px 0; padding: 13px; color: #665222; border: 1px solid #ead8a5; border-radius: 12px; background: #fff9e9; }
 .zip-password > span { display: grid; place-items: center; width: 36px; height: 36px; color: #8b6d20; border-radius: 10px; background: white; }
 .zip-password b, .zip-password small { display: block; }
@@ -335,6 +347,19 @@ a { color: inherit; text-decoration: none; }
 .sidebar-scrim { display: none; }
 .app-loading { display: grid; place-items: center; align-content: center; min-height: 100vh; gap: 14px; color: var(--muted); }
 .app-loading p { margin: 0; font-size: 13px; }
+
+/* Lightweight app opening animation */
+.splash-screen { position: fixed; inset: 0; z-index: 100; display: grid; place-content: center; justify-items: center; gap: 38px; padding: 24px; color: white; background: radial-gradient(circle at 50% 42%, #3f7659 0, #204c36 50%, #173b2a 100%); animation: splash-fade 1.1s ease both; }
+.splash-brand { display: flex; align-items: center; gap: 16px; animation: splash-rise .7s cubic-bezier(.2,.8,.2,1) both; }
+.splash-mark { display: grid; place-items: center; width: 68px; height: 68px; color: var(--green-900); border-radius: 22px 22px 22px 7px; background: #e7f1e8; box-shadow: 0 18px 45px rgba(9,31,19,.26); }
+.splash-brand strong, .splash-brand small { display: block; }
+.splash-brand strong { font-family: 'Noto Serif SC', serif; font-size: 34px; letter-spacing: .16em; }
+.splash-brand small { margin-top: 5px; color: #c7dbcd; font-size: 11px; letter-spacing: .08em; }
+.splash-progress { width: 138px; height: 3px; overflow: hidden; border-radius: 99px; background: rgba(255,255,255,.16); }
+.splash-progress i { display: block; width: 100%; height: 100%; border-radius: inherit; background: #d8eadc; transform-origin: left; animation: splash-load .9s .08s ease-out both; }
+@keyframes splash-rise { from { opacity: 0; transform: translateY(14px) scale(.96); } to { opacity: 1; transform: none; } }
+@keyframes splash-load { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes splash-fade { 0%, 78% { opacity: 1; } 100% { opacity: 0; } }
 
 /* PWA install, update and connection notices */
 .network-banner { position: fixed; top: 14px; left: 50%; z-index: 65; display: flex; align-items: center; gap: 8px; max-width: calc(100% - 28px); padding: 9px 13px; color: #7d4b35; border: 1px solid #f0cfbd; border-radius: 11px; background: #fff6ed; box-shadow: 0 10px 30px rgba(71,46,34,.12); font-size: 11px; transform: translateX(-50%); }
@@ -406,10 +431,17 @@ a { color: inherit; text-decoration: none; }
   .summary-card { gap: 12px; padding: 16px; }
   .summary-card p { font-size: 11px; }
   .summary-card small { display: none; }
+  .summary-chevron { position: absolute; right: 11px; bottom: 11px; width: 15px; height: 15px; }
   .summary-card strong { font-size: 18px; }
   .chart-legend { grid-template-columns: 1fr; gap: 10px; }
   .form-grid { grid-template-columns: 1fr; }
   .transaction-modal { padding: 22px 18px; }
   .smart-entry-actions { grid-template-columns: 1fr; }
   .transaction-row > strong { font-size: 12px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .splash-screen, .splash-brand, .splash-progress i { animation-duration: .01ms; }
+  .summary-card-button { transition: none; }
 }

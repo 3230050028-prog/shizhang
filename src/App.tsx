@@ -3,6 +3,7 @@ import type { Session } from '@supabase/supabase-js'
 import { AuthScreen } from './components/AuthScreen'
 import { Dashboard } from './components/Dashboard'
 import { PasswordRecovery } from './components/PasswordRecovery'
+import { SplashScreen } from './components/SplashScreen'
 import { demoTransactions } from './data'
 import { toLocalMonth } from './lib/date'
 import { isSupabaseConfigured, supabase } from './lib/supabase'
@@ -64,25 +65,32 @@ const failure = (prefix: string, error: unknown): ActionResult => ({
 })
 
 function App() {
+  const cloudEnabled = isSupabaseConfigured && !(import.meta.env.DEV && new URLSearchParams(window.location.search).has('demo'))
+  const [showSplash, setShowSplash] = useState(true)
   const [session, setSession] = useState<Session | null>(null)
-  const [authLoading, setAuthLoading] = useState(isSupabaseConfigured)
+  const [authLoading, setAuthLoading] = useState(cloudEnabled)
   const [dataLoading, setDataLoading] = useState(false)
   const [loadError, setLoadError] = useState('')
   const [loadAttempt, setLoadAttempt] = useState(0)
   const [recoveryMode, setRecoveryMode] = useState(false)
   const [transactions, setTransactions] = useState<Transaction[]>(() =>
-    isSupabaseConfigured ? [] : loadDemoTransactions(),
+    cloudEnabled ? [] : loadDemoTransactions(),
   )
   const [budgets, setBudgets] = useState<Budget[]>(() =>
-    isSupabaseConfigured ? [] : loadDemoBudgets(),
+    cloudEnabled ? [] : loadDemoBudgets(),
   )
   const [savedCategories, setSavedCategories] = useState<SavedCategory[]>([])
   const [savedAccounts, setSavedAccounts] = useState<SavedAccount[]>(() =>
-    isSupabaseConfigured ? [] : loadDemoAccounts(),
+    cloudEnabled ? [] : loadDemoAccounts(),
   )
 
   useEffect(() => {
-    if (!supabase) return
+    const timer = window.setTimeout(() => setShowSplash(false), 1100)
+    return () => window.clearTimeout(timer)
+  }, [])
+
+  useEffect(() => {
+    if (!cloudEnabled || !supabase) return
 
     supabase.auth.getSession().then(({ data }) => {
       setSession(data.session)
@@ -104,19 +112,19 @@ function App() {
     })
 
     return () => listener.subscription.unsubscribe()
-  }, [])
+  }, [cloudEnabled])
 
   useEffect(() => {
-    if (!isSupabaseConfigured) localStorage.setItem(demoStorageKey, JSON.stringify(transactions))
-  }, [transactions])
+    if (!cloudEnabled) localStorage.setItem(demoStorageKey, JSON.stringify(transactions))
+  }, [cloudEnabled, transactions])
 
   useEffect(() => {
-    if (!isSupabaseConfigured) localStorage.setItem(demoBudgetStorageKey, JSON.stringify(budgets))
-  }, [budgets])
+    if (!cloudEnabled) localStorage.setItem(demoBudgetStorageKey, JSON.stringify(budgets))
+  }, [budgets, cloudEnabled])
 
   useEffect(() => {
-    if (!isSupabaseConfigured) localStorage.setItem(demoAccountStorageKey, JSON.stringify(savedAccounts))
-  }, [savedAccounts])
+    if (!cloudEnabled) localStorage.setItem(demoAccountStorageKey, JSON.stringify(savedAccounts))
+  }, [cloudEnabled, savedAccounts])
 
   useEffect(() => {
     if (!session || !supabase) return
@@ -199,6 +207,53 @@ function App() {
     }
   }
 
+  const persistImportMetadata = async (inputs: TransactionInput[]) => {
+    const categories = [...new Map(inputs.map((input) => [`${input.type}:${input.category}`, {
+      id: crypto.randomUUID(),
+      type: input.type,
+      name: input.category,
+    }])).values()]
+    const accounts = [...new Map(inputs.map((input) => [input.account, {
+      id: crypto.randomUUID(),
+      name: input.account,
+    }])).values()]
+
+    if (!supabase || !session) {
+      setSavedCategories((current) => [
+        ...categories.filter((item) => !current.some((saved) => saved.type === item.type && saved.name === item.name)),
+        ...current,
+      ])
+      setSavedAccounts((current) => [
+        ...accounts.filter((item) => !current.some((saved) => saved.name === item.name)),
+        ...current,
+      ])
+      return
+    }
+
+    try {
+      const [categoryResult, accountResult] = await Promise.all([
+        supabase.from('categories').upsert(
+          categories.map(({ type, name }) => ({ user_id: session.user.id, type, name })),
+          { onConflict: 'user_id,type,name' },
+        ).select(),
+        supabase.from('accounts').upsert(
+          accounts.map(({ name }) => ({ user_id: session.user.id, name })),
+          { onConflict: 'user_id,name' },
+        ).select(),
+      ])
+      if (categoryResult.data) {
+        const saved = categoryResult.data as SavedCategory[]
+        setSavedCategories((current) => [...saved, ...current.filter((item) => !saved.some((next) => next.type === item.type && next.name === item.name))])
+      }
+      if (accountResult.data) {
+        const saved = accountResult.data as SavedAccount[]
+        setSavedAccounts((current) => [...saved, ...current.filter((item) => !saved.some((next) => next.name === item.name))])
+      }
+    } catch {
+      // Metadata is optional; imported transactions have already been saved.
+    }
+  }
+
   const addTransaction = async (input: TransactionInput): Promise<ActionResult> => {
     if (!supabase || !session) {
       setTransactions((current) => [
@@ -209,8 +264,7 @@ function App() {
         },
         ...current,
       ])
-      await persistCategory(input)
-      await persistAccount(input)
+      void Promise.all([persistCategory(input), persistAccount(input)])
       return { ok: true }
     }
 
@@ -222,11 +276,48 @@ function App() {
         .single()
       if (error) return failure('保存失败', error)
       setTransactions((current) => [data as Transaction, ...current])
-      await persistCategory(input)
-      await persistAccount(input)
+      void Promise.all([persistCategory(input), persistAccount(input)])
       return { ok: true }
     } catch (error) {
       return failure('保存失败', error)
+    }
+  }
+
+  const addTransactions = async (
+    inputs: TransactionInput[],
+    onProgress?: (completed: number) => void,
+  ): Promise<ActionResult> => {
+    if (!inputs.length) return { ok: true }
+
+    if (!supabase || !session) {
+      const now = new Date().toISOString()
+      const created = inputs.map((input) => ({ ...input, id: crypto.randomUUID(), created_at: now }))
+      setTransactions((current) => [...created, ...current])
+      void persistImportMetadata(inputs)
+      onProgress?.(inputs.length)
+      return { ok: true }
+    }
+
+    const batchSize = 100
+    let completed = 0
+    try {
+      for (let start = 0; start < inputs.length; start += batchSize) {
+        const batch = inputs.slice(start, start + batchSize)
+        const { data, error } = await supabase
+          .from('transactions')
+          .insert(batch.map((input) => ({ ...input, user_id: session.user.id })))
+          .select()
+        if (error) return failure(`已导入 ${completed} 笔，后续保存失败`, error)
+        const saved = (data as Transaction[] | null) ?? []
+        setTransactions((current) => [...saved, ...current])
+        completed += saved.length
+        onProgress?.(completed)
+      }
+
+      void persistImportMetadata(inputs)
+      return { ok: true }
+    } catch (error) {
+      return failure(`已导入 ${completed} 笔，后续保存失败`, error)
     }
   }
 
@@ -303,13 +394,15 @@ function App() {
     }
   }
 
+  if (showSplash) return <SplashScreen />
+
   if (authLoading) {
     return <div className="app-loading"><span className="brand-mark">拾</span><p>正在打开账本…</p></div>
   }
 
   if (recoveryMode) return <PasswordRecovery onComplete={() => setRecoveryMode(false)} />
 
-  if (isSupabaseConfigured && !session) return <AuthScreen />
+  if (cloudEnabled && !session) return <AuthScreen />
 
   return (
     <Dashboard
@@ -318,9 +411,10 @@ function App() {
       savedCategories={savedCategories}
       savedAccounts={savedAccounts}
       email={session?.user.email}
-      demo={!isSupabaseConfigured}
+      demo={!cloudEnabled}
       loading={dataLoading}
       onAdd={addTransaction}
+      onAddBatch={addTransactions}
       onUpdate={updateTransaction}
       onDelete={deleteTransaction}
       onSaveBudget={saveBudget}
