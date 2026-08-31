@@ -168,6 +168,7 @@ a { color: inherit; text-decoration: none; }
 .menu-button { display: none; }
 .demo-badge, .status-pill { padding: 6px 10px; color: var(--green-700); border-radius: 99px; background: #e6f1e8; font-size: 11px; font-weight: 700; }
 .dashboard-toolbar { display: flex; align-items: center; justify-content: space-between; max-width: 1260px; margin: 0 auto 18px; }
+.toolbar-actions { display: flex; gap: 9px; }
 .error-banner { display: flex; align-items: center; gap: 10px; max-width: 1260px; margin: 0 auto 16px; padding: 11px 13px; color: #914b39; border: 1px solid #f0c9bd; border-radius: 11px; background: #fff3ee; font-size: 12px; }
 .error-banner span { flex: 1; }
 .error-banner button { padding: 5px 8px; color: #914b39; border: 0; border-radius: 7px; background: rgba(255,255,255,.7); font-size: 11px; font-weight: 700; }
@@ -272,6 +273,30 @@ a { color: inherit; text-decoration: none; }
 .budget-modal-intro svg { color: var(--green-600); }
 .form-hint { margin: -5px 0 0; color: var(--muted); font-size: 11px; }
 .inline-error { margin: -3px 0 0; padding: 10px 12px; color: #a44e3b; border: 1px solid #f0cec4; border-radius: 9px; background: #fff3ef; font-size: 12px; line-height: 1.5; }
+.import-modal { width: min(620px, 100%); }
+.file-drop { display: grid !important; justify-items: center; gap: 7px !important; padding: 27px 20px; color: var(--green-700) !important; border: 1.5px dashed #b8cbbd; border-radius: 15px; background: var(--green-50); text-align: center; cursor: pointer; }
+.file-drop:hover { border-color: var(--green-600); background: #e8f1ea; }
+.file-drop strong { color: var(--ink); font-size: 14px; }
+.file-drop span { color: var(--muted); font-size: 11px; font-weight: 400; }
+.file-drop input { position: absolute; width: 1px; height: 1px; padding: 0; opacity: 0; pointer-events: none; }
+.import-summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 14px 0; }
+.import-summary span { padding: 10px; color: var(--muted); border: 1px solid var(--line); border-radius: 10px; background: #fafbf9; text-align: center; font-size: 10px; }
+.import-summary b { display: block; margin-bottom: 2px; color: var(--ink); font-size: 17px; }
+.import-preview { margin-bottom: 14px; overflow: hidden; border: 1px solid var(--line); border-radius: 12px; }
+.import-preview > p { margin: 0; padding: 9px 12px; color: var(--muted); border-bottom: 1px solid var(--line); background: #fafbf9; font-size: 10px; }
+.import-preview > div { display: flex; align-items: center; justify-content: space-between; gap: 15px; padding: 10px 12px; border-bottom: 1px solid #edf0ec; }
+.import-preview > div:last-child { border-bottom: 0; }
+.import-preview span { min-width: 0; }
+.import-preview b, .import-preview small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.import-preview b { font-size: 11px; }
+.import-preview small { margin-top: 2px; color: var(--muted); font-size: 9px; }
+.import-preview strong { flex: 0 0 auto; font-size: 11px; }
+.import-preview strong.income { color: #31825b; }
+.import-preview strong.expense { color: #34443b; }
+.import-note { margin: 0 0 13px; color: var(--muted); font-size: 10px; line-height: 1.5; }
+.import-success { display: grid; justify-items: center; gap: 10px; padding: 30px 10px 8px; color: var(--green-600); text-align: center; }
+.import-success h3 { margin: 2px 0 0; color: var(--ink); font-family: 'Noto Serif SC', serif; font-size: 21px; }
+.import-success p { margin: 0 0 10px; color: var(--muted); font-size: 12px; }
 .mobile-add { display: none; position: fixed; right: 22px; bottom: 22px; z-index: 15; place-items: center; width: 54px; height: 54px; color: white; border: 0; border-radius: 18px 18px 18px 5px; background: var(--green-700); box-shadow: 0 12px 30px rgba(47,102,74,.3); }
 .sidebar-scrim { display: none; }
 .app-loading { display: grid; place-items: center; align-content: center; min-height: 100vh; gap: 14px; color: var(--muted); }
@@ -313,6 +338,7 @@ a { color: inherit; text-decoration: none; }
   .topbar-actions { display: none; }
   .dashboard-toolbar { margin-bottom: 13px; }
   .dashboard-toolbar .secondary-button { width: 42px; padding: 0; font-size: 0; }
+  .toolbar-actions { gap: 7px; }
   .summary-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
   .balance-card { grid-column: 1 / -1; }
   .summary-card { padding: 18px; }

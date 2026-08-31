@@ -26,6 +26,7 @@ import {
   SlidersHorizontal,
   Trash2,
   TrendingUp,
+  Upload,
   Utensils,
   WalletCards,
   X,
@@ -36,6 +37,7 @@ import { escapeCsv } from '../lib/csv'
 import { toLocalMonth } from '../lib/date'
 import type { ActionResult, Budget, SavedAccount, SavedCategory, Transaction, TransactionInput, TransactionType } from '../types'
 import { BudgetForm } from './BudgetForm'
+import { PaymentImport } from './PaymentImport'
 import { TransactionForm } from './TransactionForm'
 
 const SpendingChart = lazy(() => import('./SpendingChart'))
@@ -99,6 +101,7 @@ export function Dashboard({
   const [showForm, setShowForm] = useState(false)
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null)
   const [showBudgetForm, setShowBudgetForm] = useState(false)
+  const [showImport, setShowImport] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [month, setMonth] = useState(toLocalMonth())
@@ -222,7 +225,7 @@ export function Dashboard({
     <div className="app-shell">
       <aside className={sidebarOpen ? 'sidebar open' : 'sidebar'}>
         <div className="sidebar-top">
-          <a className="brand" href="/">
+          <a className="brand" href={import.meta.env.BASE_URL}>
             <span className="brand-mark"><Leaf size={20} /></span>
             <span>拾账</span>
           </a>
@@ -266,7 +269,10 @@ export function Dashboard({
             <input type="month" value={month} onChange={(event) => changeMonth(event.target.value)} />
             <span>{displayMonth}<ChevronDown size={16} /></span>
           </label>
-          <button className="secondary-button" onClick={exportCsv}><Download size={17} />导出本月</button>
+          <div className="toolbar-actions">
+            <button className="secondary-button" onClick={() => setShowImport(true)}><Upload size={17} />导入账单</button>
+            <button className="secondary-button" onClick={exportCsv}><Download size={17} />导出本月</button>
+          </div>
         </section>
 
         {(loadError || operationError) && (
@@ -376,6 +382,13 @@ export function Dashboard({
           currentAmount={budgetAmount}
           onClose={() => setShowBudgetForm(false)}
           onSave={(amount) => onSaveBudget(month, amount)}
+        />
+      )}
+      {showImport && (
+        <PaymentImport
+          transactions={transactions}
+          onClose={() => setShowImport(false)}
+          onImport={onAdd}
         />
       )}
     </div>
