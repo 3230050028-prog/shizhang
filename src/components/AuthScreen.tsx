@@ -1,6 +1,17 @@
 import { useState, type FormEvent } from 'react'
-import { ArrowRight, CheckCircle2, Eye, EyeOff, Leaf } from 'lucide-react'
+import { ArrowRight, CheckCircle2, Eye, EyeOff, Leaf, MailCheck } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+
+const translateAuthError = (message: string) => {
+  const normalized = message.toLowerCase()
+  if (normalized.includes('email not confirmed')) return '邮箱尚未验证。请先打开注册邮件，点击“确认邮箱”链接后再登录。'
+  if (normalized.includes('invalid login credentials')) return '邮箱或密码不正确，请检查后重试。'
+  if (normalized.includes('user already registered')) return '这个邮箱已经注册过，请直接登录或使用“忘记密码”。'
+  if (normalized.includes('email rate limit exceeded')) return '验证邮件发送得太频繁，请稍等几分钟后再试。'
+  if (normalized.includes('password should be at least')) return '密码至少需要 6 位字符。'
+  if (normalized.includes('unable to validate email address') || normalized.includes('invalid email')) return '邮箱地址格式不正确，请检查后重试。'
+  return `操作失败：${message}`
+}
 
 export function AuthScreen() {
   const [mode, setMode] = useState<'login' | 'register'>('login')
@@ -9,6 +20,7 @@ export function AuthScreen() {
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
+  const [verificationEmail, setVerificationEmail] = useState('')
 
   const submit = async (event: FormEvent) => {
     event.preventDefault()
@@ -16,6 +28,7 @@ export function AuthScreen() {
 
     setLoading(true)
     setMessage('')
+    setVerificationEmail('')
 
     let result
     try {
@@ -36,12 +49,12 @@ export function AuthScreen() {
 
     setLoading(false)
     if (result.error) {
-      setMessage(result.error.message)
+      setMessage(translateAuthError(result.error.message))
       return
     }
 
     if (mode === 'register' && !result.data.session) {
-      setMessage('注册成功！请前往邮箱完成验证，然后回来登录。')
+      setVerificationEmail(email.trim())
     }
   }
 
@@ -57,7 +70,7 @@ export function AuthScreen() {
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
         redirectTo: new URL(import.meta.env.BASE_URL, window.location.origin).toString(),
       })
-      setMessage(error ? error.message : '重置邮件已发送，请检查邮箱。')
+      setMessage(error ? translateAuthError(error.message) : `重置邮件已发送到 ${email.trim()}，请检查邮箱。`)
     } catch {
       setMessage('网络连接失败，请稍后重试。')
     } finally {
@@ -68,6 +81,7 @@ export function AuthScreen() {
   const switchMode = () => {
     setMode((current) => (current === 'login' ? 'register' : 'login'))
     setMessage('')
+    setVerificationEmail('')
   }
 
   return (
@@ -104,7 +118,7 @@ export function AuthScreen() {
 
           <form onSubmit={submit}>
             <label>
-              邮箱
+              <span className="auth-field-label">邮箱地址 <small>用于接收确认邮件</small></span>
               <input
                 type="email"
                 placeholder="name@example.com"
@@ -140,6 +154,18 @@ export function AuthScreen() {
             )}
 
             {message && <p className="form-message">{message}</p>}
+
+            {verificationEmail && (
+              <div className="verification-message" role="status">
+                <span className="verification-icon"><MailCheck size={20} /></span>
+                <div>
+                  <b>确认邮件已经发送</b>
+                  <small>请打开下面这个邮箱：</small>
+                  <strong>{verificationEmail}</strong>
+                  <p>在邮件中点击 <b>Confirm your email（确认邮箱）</b>，然后返回拾账登录。也可以检查一下垃圾邮件箱。</p>
+                </div>
+              </div>
+            )}
 
             <button className="primary-button auth-submit" disabled={loading}>
               {loading ? '请稍候…' : mode === 'login' ? '登录' : '创建账号'}
