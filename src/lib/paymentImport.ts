@@ -9,6 +9,13 @@ export interface PaymentImportResult {
   skipped: number
 }
 
+export class ZipPasswordRequiredError extends Error {
+  constructor() {
+    super('这个压缩包有密码，请输入支付软件提供的解压密码。')
+    this.name = 'ZipPasswordRequiredError'
+  }
+}
+
 const normalizeHeader = (value: string) => value.replace(/[\s（）()]/g, '').toLowerCase()
 
 const parseDelimitedRows = (text: string, delimiter: string) => {
@@ -144,7 +151,7 @@ export const parsePaymentStatement = (text: string): PaymentImportResult => {
   return { rows, skipped }
 }
 
-export const readPaymentStatement = async (file: File) => {
+const parseTextFile = async (file: Blob) => {
   const bytes = await file.arrayBuffer()
   let text = new TextDecoder('utf-8').decode(bytes)
   const replacementCount = (text.match(/�/g) ?? []).length
@@ -152,4 +159,64 @@ export const readPaymentStatement = async (file: File) => {
     text = new TextDecoder('gb18030').decode(bytes)
   }
   return parsePaymentStatement(text)
+}
+
+const rowsToText = (rows: unknown[][]) => rows.map((row) => row.map((cell) => {
+  let value = ''
+  if (cell instanceof Date) {
+    const date = [cell.getFullYear(), String(cell.getMonth() + 1).padStart(2, '0'), String(cell.getDate()).padStart(2, '0')].join('-')
+    const time = [cell.getHours(), cell.getMinutes(), cell.getSeconds()].map((part) => String(part).padStart(2, '0')).join(':')
+    value = `${date} ${time}`
+  } else if (cell !== null && cell !== undefined) {
+    value = String(cell)
+  }
+  return `"${value.replaceAll('"', '""')}"`
+}).join('\t')).join('\n')
+
+const parseExcelFile = async (file: Blob) => {
+  const { readSheet } = await import('read-excel-file/browser')
+  const rows = await readSheet(file)
+  return parsePaymentStatement(rowsToText(rows))
+}
+
+const extensionOf = (name: string) => name.toLowerCase().match(/\.[^.]+$/)?.[0] ?? ''
+
+const parseSupportedFile = async (file: Blob, name: string) => {
+  const extension = extensionOf(name)
+  if (extension === '.xlsx') return parseExcelFile(file)
+  if (extension === '.csv' || extension === '.txt') return parseTextFile(file)
+  throw new Error('暂不支持这个文件。请选择 CSV、TXT、XLSX 或 ZIP 文件。')
+}
+
+const parseZipFile = async (file: File, password?: string) => {
+  const { BlobReader, BlobWriter, ERR_ENCRYPTED, ERR_ENCRYPTED_CENTRAL_DIRECTORY, ERR_INVALID_PASSWORD, ZipReader } = await import('@zip.js/zip.js')
+  const reader = new ZipReader(new BlobReader(file), password ? { password } : undefined)
+  try {
+    const entries = (await reader.getEntries())
+      .filter((entry) => !entry.directory && ['.csv', '.txt', '.xlsx'].includes(extensionOf(entry.filename)))
+      .sort((left, right) => {
+        const priority = (name: string) => ({ '.csv': 0, '.txt': 1, '.xlsx': 2 })[extensionOf(name)] ?? 9
+        return priority(left.filename) - priority(right.filename) || (right.uncompressedSize ?? 0) - (left.uncompressedSize ?? 0)
+      })
+    const entry = entries[0]
+    if (!entry || entry.directory) throw new Error('压缩包中没有找到 CSV、TXT 或 XLSX 账单文件。')
+    if ((entry.uncompressedSize ?? 0) > 30 * 1024 * 1024) throw new Error('压缩包内的账单超过 30MB，请解压后分批导入。')
+    if (entry.encrypted && !password) throw new ZipPasswordRequiredError()
+    const extracted = await entry.getData(new BlobWriter(), password ? { password } : undefined)
+    return parseSupportedFile(extracted, entry.filename)
+  } catch (reason) {
+    const message = reason instanceof Error ? reason.message : String(reason)
+    if ((message === ERR_ENCRYPTED || message === ERR_ENCRYPTED_CENTRAL_DIRECTORY) && !password) throw new ZipPasswordRequiredError()
+    if (message === ERR_INVALID_PASSWORD || /password/i.test(message)) throw new Error('压缩包密码不正确，请重新输入。')
+    throw reason
+  } finally {
+    await reader.close()
+  }
+}
+
+export const readPaymentStatement = async (file: File, password?: string) => {
+  if (file.size > 30 * 1024 * 1024) throw new Error('文件超过 30MB，请缩小文件或分批导入。')
+  return extensionOf(file.name) === '.zip'
+    ? parseZipFile(file, password)
+    : parseSupportedFile(file, file.name)
 }

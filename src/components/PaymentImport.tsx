@@ -1,6 +1,6 @@
 import { useMemo, useState, type ChangeEvent } from 'react'
-import { CheckCircle2, FileSpreadsheet, Upload, X } from 'lucide-react'
-import { readPaymentStatement, transactionFingerprint, type ParsedPaymentRow } from '../lib/paymentImport'
+import { CheckCircle2, FileArchive, FileSpreadsheet, KeyRound, Upload, X } from 'lucide-react'
+import { readPaymentStatement, transactionFingerprint, ZipPasswordRequiredError, type ParsedPaymentRow } from '../lib/paymentImport'
 import type { ActionResult, Transaction, TransactionInput } from '../types'
 
 interface PaymentImportProps {
@@ -13,6 +13,9 @@ const money = new Intl.NumberFormat('zh-CN', { style: 'currency', currency: 'CNY
 
 export function PaymentImport({ transactions, onClose, onImport }: PaymentImportProps) {
   const [fileName, setFileName] = useState('')
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [zipPassword, setZipPassword] = useState('')
+  const [needsPassword, setNeedsPassword] = useState(false)
   const [rows, setRows] = useState<ParsedPaymentRow[]>([])
   const [skipped, setSkipped] = useState(0)
   const [duplicates, setDuplicates] = useState(0)
@@ -24,14 +27,11 @@ export function PaymentImport({ transactions, onClose, onImport }: PaymentImport
     [transactions],
   )
 
-  const chooseFile = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (!file) return
+  const loadFile = async (file: File, password?: string) => {
     setError('')
     setImported(null)
-    setFileName(file.name)
     try {
-      const result = await readPaymentStatement(file)
+      const result = await readPaymentStatement(file, password)
       const seen = new Set(existing)
       let duplicateCount = 0
       const uniqueRows = result.rows.filter((row) => {
@@ -46,13 +46,36 @@ export function PaymentImport({ transactions, onClose, onImport }: PaymentImport
       setRows(uniqueRows.slice(0, 500))
       setSkipped(result.skipped + Math.max(0, uniqueRows.length - 500))
       setDuplicates(duplicateCount)
+      setNeedsPassword(false)
       if (!uniqueRows.length) setError('没有发现可导入的新记录，可能都已经导入过了。')
     } catch (reason) {
       setRows([])
       setSkipped(0)
       setDuplicates(0)
-      setError(reason instanceof Error ? reason.message : '账单读取失败，请重新选择文件。')
+      if (reason instanceof ZipPasswordRequiredError) {
+        setNeedsPassword(true)
+      } else {
+        setError(reason instanceof Error ? reason.message : '账单读取失败，请重新选择文件。')
+      }
     }
+  }
+
+  const chooseFile = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+    setFileName(file.name)
+    setSelectedFile(file)
+    setZipPassword('')
+    setNeedsPassword(false)
+    void loadFile(file)
+  }
+
+  const unlockZip = () => {
+    if (!selectedFile || !zipPassword.trim()) {
+      setError('请输入压缩包密码。')
+      return
+    }
+    void loadFile(selectedFile, zipPassword)
   }
 
   const importRows = async () => {
@@ -91,11 +114,25 @@ export function PaymentImport({ transactions, onClose, onImport }: PaymentImport
         ) : (
           <>
             <label className="file-drop">
-              <FileSpreadsheet size={30} />
+              {fileName.toLowerCase().endsWith('.zip') ? <FileArchive size={30} /> : <FileSpreadsheet size={30} />}
               <strong>{fileName || '选择支付宝或微信账单'}</strong>
-              <span>支持 CSV 或 TXT，最多一次导入 500 笔</span>
-              <input type="file" accept=".csv,.txt,text/csv,text/plain" onChange={chooseFile} />
+              <span>支持 CSV、TXT、Excel（XLSX）或 ZIP，最多一次导入 500 笔</span>
+              <input type="file" accept=".csv,.txt,.xlsx,.zip,text/csv,text/plain,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/zip" onChange={chooseFile} />
             </label>
+
+            {needsPassword && (
+              <div className="zip-password">
+                <span><KeyRound size={18} /></span>
+                <div>
+                  <b>压缩包需要密码</b>
+                  <small>输入支付软件在邮件中提供的解压密码，只用于本机读取。</small>
+                  <div>
+                    <input type="password" value={zipPassword} onChange={(event) => setZipPassword(event.target.value)} placeholder="输入解压密码" />
+                    <button type="button" onClick={unlockZip}>解压并读取</button>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {(rows.length > 0 || skipped > 0 || duplicates > 0) && (
               <div className="import-summary">
@@ -118,7 +155,7 @@ export function PaymentImport({ transactions, onClose, onImport }: PaymentImport
             )}
 
             {error && <p className="inline-error">{error}</p>}
-            <p className="import-note">请从支付软件的账单页面导出文件。导入前不会修改任何数据。</p>
+            <p className="import-note">文件会在当前设备中读取，原文件和压缩包密码不会上传。确认导入前不会修改任何数据。</p>
             <button className="primary-button modal-submit" disabled={!rows.length || importing} onClick={() => void importRows()}>
               <Upload size={18} />{importing ? '正在导入…' : `确认导入 ${rows.length} 笔`}
             </button>
