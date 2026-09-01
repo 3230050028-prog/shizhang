@@ -1,5 +1,18 @@
 import { useMemo, useState, type ChangeEvent } from 'react'
-import { CheckCircle2, FileArchive, FileSpreadsheet, KeyRound, Upload, X } from 'lucide-react'
+import {
+  BookOpen,
+  CheckCircle2,
+  ChevronRight,
+  FileArchive,
+  FileCheck2,
+  FileSpreadsheet,
+  KeyRound,
+  Mail,
+  Search,
+  Smartphone,
+  Upload,
+  X,
+} from 'lucide-react'
 import { readPaymentStatement, transactionFingerprint, ZipPasswordRequiredError, type ParsedPaymentRow } from '../lib/paymentImport'
 import type { ActionResult, Transaction, TransactionInput } from '../types'
 
@@ -23,6 +36,7 @@ export function PaymentImport({ transactions, onClose, onImport }: PaymentImport
   const [importing, setImporting] = useState(false)
   const [importProgress, setImportProgress] = useState(0)
   const [imported, setImported] = useState<number | null>(null)
+  const [showGuide, setShowGuide] = useState(true)
   const existing = useMemo(
     () => new Set(transactions.map(transactionFingerprint)),
     [transactions],
@@ -68,6 +82,7 @@ export function PaymentImport({ transactions, onClose, onImport }: PaymentImport
     setSelectedFile(file)
     setZipPassword('')
     setNeedsPassword(false)
+    setShowGuide(false)
     void loadFile(file)
   }
 
@@ -99,7 +114,12 @@ export function PaymentImport({ transactions, onClose, onImport }: PaymentImport
       <section className="transaction-modal import-modal" role="dialog" aria-modal="true" aria-labelledby="import-title" onMouseDown={(event) => event.stopPropagation()}>
         <header>
           <div><p className="eyebrow">减少手动录入</p><h2 id="import-title">导入支付账单</h2></div>
-          <button className="icon-button" type="button" onClick={onClose} aria-label="关闭"><X size={20} /></button>
+          <div className="import-header-actions">
+            <button className="import-guide-toggle" type="button" onClick={() => setShowGuide((visible) => !visible)} aria-expanded={showGuide}>
+              <BookOpen size={15} />{showGuide ? '收起教程' : '导入教程'}
+            </button>
+            <button className="icon-button" type="button" onClick={onClose} aria-label="关闭"><X size={20} /></button>
+          </div>
         </header>
 
         {imported !== null ? (
@@ -111,6 +131,62 @@ export function PaymentImport({ transactions, onClose, onImport }: PaymentImport
           </div>
         ) : (
           <>
+            {showGuide && (
+              <section className="import-guide" aria-label="账单导入教程">
+                <div className="import-guide-intro">
+                  <span><BookOpen size={20} /></span>
+                  <div><b>第一次导入？跟着下面 4 步操作</b><small>菜单名称可能因支付软件版本略有不同，找不到时可在应用内搜索“下载账单”或“交易流水”。</small></div>
+                </div>
+
+                <div className="import-source-guide">
+                  <div>
+                    <strong className="wechat-dot">微信支付</strong>
+                    <p>微信 → 我 → 服务 → 钱包 → 账单 → 常见问题 → 下载账单 → 用于个人对账</p>
+                  </div>
+                  <div>
+                    <strong className="alipay-dot">支付宝</strong>
+                    <p>支付宝 → 我的 → 账单 → 右上角更多 → 开具交易流水证明 → 用于个人对账</p>
+                  </div>
+                </div>
+
+                <div className="import-guide-steps">
+                  <article>
+                    <span className="guide-step-number">1</span>
+                    <div className="guide-illustration"><Smartphone size={25} /><Search size={13} /></div>
+                    <b>申请账单</b>
+                    <small>选择时间范围并填写自己的邮箱，提交导出申请。</small>
+                  </article>
+                  <ChevronRight className="guide-arrow" size={17} />
+                  <article>
+                    <span className="guide-step-number">2</span>
+                    <div className="guide-illustration"><Mail size={25} /><FileArchive size={13} /></div>
+                    <b>下载附件</b>
+                    <small>到账后保存邮件里的 ZIP、CSV 或 Excel 文件；先不用手动解压。</small>
+                  </article>
+                  <ChevronRight className="guide-arrow" size={17} />
+                  <article>
+                    <span className="guide-step-number">3</span>
+                    <div className="guide-illustration"><Upload size={25} /><FileSpreadsheet size={13} /></div>
+                    <b>选择文件</b>
+                    <small>点击下方上传区域，从“文件”或“下载”文件夹中选择账单。</small>
+                  </article>
+                  <ChevronRight className="guide-arrow" size={17} />
+                  <article>
+                    <span className="guide-step-number">4</span>
+                    <div className="guide-illustration"><FileCheck2 size={25} /><CheckCircle2 size={13} /></div>
+                    <b>预览并确认</b>
+                    <small>核对识别数量和前几笔记录，再点击“确认导入”。</small>
+                  </article>
+                </div>
+
+                <div className="import-guide-tip">
+                  <b>只需要记录一笔？</b>
+                  <span>请使用“记一笔”里的支付截图识别；这里适合一次导入多笔历史账单。</span>
+                </div>
+                <button className="import-guide-start" type="button" onClick={() => setShowGuide(false)}>我知道了，开始选择账单</button>
+              </section>
+            )}
+
             <label className="file-drop">
               {fileName.toLowerCase().endsWith('.zip') ? <FileArchive size={30} /> : <FileSpreadsheet size={30} />}
               <strong>{fileName || '选择支付宝或微信账单'}</strong>
