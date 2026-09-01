@@ -1,8 +1,8 @@
 import { useState, type ChangeEvent, type FormEvent } from 'react'
-import { ClipboardPaste, ImagePlus, ShieldCheck, Sparkles, X } from 'lucide-react'
+import { ClipboardPaste, ImagePlus, ListChecks, ShieldCheck, Sparkles, Trash2, X } from 'lucide-react'
 import { defaultAccounts, expenseCategories, incomeCategories } from '../data'
 import { toLocalDate } from '../lib/date'
-import { parseQuickEntry } from '../lib/quickEntry'
+import { parseQuickEntries, parseQuickEntry } from '../lib/quickEntry'
 import { recognizePaymentImage } from '../lib/imageOcr'
 import type { ActionResult, TransactionInput, TransactionType } from '../types'
 
@@ -12,10 +12,11 @@ interface TransactionFormProps {
   knownAccounts?: string[]
   onClose: () => void
   onSave: (input: TransactionInput) => Promise<ActionResult>
+  onSaveBatch: (inputs: TransactionInput[], onProgress?: (completed: number) => void) => Promise<ActionResult>
   onSaved?: (input: TransactionInput) => void
 }
 
-export function TransactionForm({ initial, knownCategories, knownAccounts, onClose, onSave, onSaved }: TransactionFormProps) {
+export function TransactionForm({ initial, knownCategories, knownAccounts, onClose, onSave, onSaveBatch, onSaved }: TransactionFormProps) {
   const [type, setType] = useState<TransactionType>(initial?.type ?? 'expense')
   const [amount, setAmount] = useState(initial ? String(initial.amount) : '')
   const [category, setCategory] = useState(initial?.category ?? expenseCategories[0])
@@ -33,6 +34,8 @@ export function TransactionForm({ initial, knownCategories, knownAccounts, onClo
   const [ocrProgress, setOcrProgress] = useState(0)
   const [ocrStatus, setOcrStatus] = useState('')
   const [ocrFileName, setOcrFileName] = useState('')
+  const [ocrCandidates, setOcrCandidates] = useState<TransactionInput[]>([])
+  const [batchSaving, setBatchSaving] = useState(false)
   const defaultCategories = type === 'expense' ? expenseCategories : incomeCategories
   const categories = [...new Set([
     ...defaultCategories,
@@ -54,6 +57,7 @@ export function TransactionForm({ initial, knownCategories, knownAccounts, onClo
   const applySmartText = (text = smartText) => {
     setSmartError('')
     setSmartMessage('')
+    setOcrCandidates([])
     try {
       const result = parseQuickEntry(text, account, new Date())
       setType(result.input.type)
@@ -107,11 +111,42 @@ export function TransactionForm({ initial, knownCategories, knownAccounts, onClo
         setOcrStatus(status)
       })
       setSmartText(text)
-      applySmartText(text)
+      const results = parseQuickEntries(text, account, new Date())
+      if (results.length > 1) {
+        setOcrCandidates(results.map((result) => result.input))
+        setSmartMessage(`从截图中识别到 ${results.length} 笔账目，请逐笔检查后批量保存。`)
+      } else {
+        applySmartText(text)
+      }
     } catch (reason) {
       setSmartError(reason instanceof Error ? reason.message : '截图识别失败，请换一张清晰截图重试。')
     } finally {
       setOcrLoading(false)
+    }
+  }
+
+  const updateOcrCandidate = (index: number, patch: Partial<TransactionInput>) => {
+    setOcrCandidates((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, ...patch } : item))
+  }
+
+  const saveOcrCandidates = async () => {
+    if (!ocrCandidates.length || ocrCandidates.some((item) => !item.amount || !item.occurred_on)) {
+      setSmartError('请检查每笔账目的金额和日期。')
+      return
+    }
+    setBatchSaving(true)
+    setSmartError('')
+    try {
+      const result = await onSaveBatch(ocrCandidates)
+      if (!result.ok) {
+        setSmartError(result.error ?? '批量保存失败，请稍后重试。')
+        return
+      }
+      onClose()
+    } catch (reason) {
+      setSmartError(reason instanceof Error ? `批量保存失败：${reason.message}` : '批量保存失败，请稍后重试。')
+    } finally {
+      setBatchSaving(false)
     }
   }
 
@@ -193,12 +228,39 @@ export function TransactionForm({ initial, knownCategories, knownAccounts, onClo
                 <button className="secondary-button" type="button" onClick={() => void pasteFromClipboard()}><ClipboardPaste size={15} />粘贴通知</button>
                 <button className="smart-apply" type="button" onClick={() => applySmartText()}><Sparkles size={15} />识别并填入</button>
               </div>
+              {ocrCandidates.length > 0 && (
+                <div className="ocr-batch-preview">
+                  <div className="ocr-batch-title">
+                    <span><ListChecks size={17} /></span>
+                    <div><b>识别到 {ocrCandidates.length} 笔账目</b><small>金额、商户和日期都可以在保存前修改</small></div>
+                  </div>
+                  <div className="ocr-batch-list">
+                    {ocrCandidates.map((item, index) => (
+                      <article key={`${index}-${item.amount}-${item.occurred_on}`}>
+                        <div className="ocr-batch-row-title">
+                          <span className={item.type}>{item.type === 'income' ? '收入' : '支出'} · {item.category} · {item.account}</span>
+                          <button type="button" onClick={() => setOcrCandidates((current) => current.filter((_, itemIndex) => itemIndex !== index))} aria-label={`删除第 ${index + 1} 笔`}><Trash2 size={14} /></button>
+                        </div>
+                        <div className="ocr-batch-fields">
+                          <label>金额<input type="number" min="0.01" step="0.01" value={item.amount} onChange={(event) => updateOcrCandidate(index, { amount: Number(event.target.value) })} /></label>
+                          <label>日期<input type="date" value={item.occurred_on} onChange={(event) => updateOcrCandidate(index, { occurred_on: event.target.value })} /></label>
+                        </div>
+                        <label>商户或事项<input value={item.note} maxLength={100} onChange={(event) => updateOcrCandidate(index, { note: event.target.value })} /></label>
+                      </article>
+                    ))}
+                  </div>
+                  <button className="ocr-batch-save" type="button" disabled={batchSaving} onClick={() => void saveOcrCandidates()}>
+                    {batchSaving ? '批量保存中…' : `确认保存 ${ocrCandidates.length} 笔`}
+                  </button>
+                </div>
+              )}
               {smartMessage && <p className="smart-success">{smartMessage}</p>}
               {smartError && <p className="inline-error">{smartError}</p>}
               <p className="smart-privacy"><ShieldCheck size={13} />文字和截图只在当前设备处理，不会上传；首次截图识别需要加载本地模型。</p>
             </section>
           )}
 
+          {ocrCandidates.length === 0 && <>
           <div className="type-switch">
             <button
               type="button"
@@ -267,6 +329,7 @@ export function TransactionForm({ initial, knownCategories, knownAccounts, onClo
           <button className="primary-button modal-submit" disabled={saving}>
             {saving ? '保存中…' : initial ? '保存修改' : '保存记录'}
           </button>
+          </>}
         </form>
       </section>
     </div>

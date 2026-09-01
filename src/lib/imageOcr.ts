@@ -1,4 +1,11 @@
+import type { Worker } from 'tesseract.js'
+
 type OcrProgress = (percent: number, status: string) => void
+
+let workerPromise: Promise<Worker> | null = null
+let recognitionQueue: Promise<void> = Promise.resolve()
+let activeProgress: OcrProgress | null = null
+let recognitionRound = 1
 
 const statusLabels: Record<string, string> = {
   'loading tesseract core': '正在启动本地识别引擎',
@@ -33,9 +40,9 @@ const loadImage = (file: File) => new Promise<HTMLImageElement>((resolve, reject
 const prepareImage = async (file: File) => {
   const image = await loadImage(file)
   const preferredScale = image.naturalWidth < 1600
-    ? Math.min(2, 1800 / image.naturalWidth)
-    : Math.min(1, 2000 / image.naturalWidth)
-  const pixelScale = Math.sqrt(8_000_000 / (image.naturalWidth * image.naturalHeight))
+    ? Math.min(1.75, 1600 / image.naturalWidth)
+    : Math.min(1, 1800 / image.naturalWidth)
+  const pixelScale = Math.sqrt(6_000_000 / (image.naturalWidth * image.naturalHeight))
   const scale = Math.min(preferredScale, pixelScale)
   const canvas = document.createElement('canvas')
   canvas.width = Math.max(1, Math.round(image.naturalWidth * scale))
@@ -100,7 +107,7 @@ const convertToHighContrast = (canvas: HTMLCanvasElement) => {
 const normalizeOcrText = (text: string) => {
   const lines = text
     .replace(/(?<=[\u3400-\u9fff])[ \t]+(?=[\u3400-\u9fff])/g, '')
-    .replace(/(?:文付|支村)(?=方式|时间|金额)/g, '支付')
+    .replace(/(?:文付|支村)(?=方式|时间|金额|账单)/g, '支付')
     .split('\n')
     .map((line) => line.trim())
     .filter((line) => {
@@ -123,42 +130,54 @@ const recognitionScore = (text: string, confidence: number) => {
   return confidence + Math.min(keywords, 6) * 4 + (hasAmount ? 4 : 0) + (hasDate ? 4 : 0)
 }
 
-export async function recognizePaymentImage(file: File, onProgress: OcrProgress) {
-  let recognitionRound = 1
-  const [{ createWorker, OEM, PSM }, image] = await Promise.all([
-    import('tesseract.js'),
-    prepareImage(file),
-  ])
+const getWorker = () => {
+  if (workerPromise) return workerPromise
   const baseUrl = new URL(import.meta.env.BASE_URL, window.location.origin)
   const ocrPath = new URL('ocr/', baseUrl).href
-  const worker = await createWorker(['chi_sim', 'eng'], OEM.LSTM_ONLY, {
-    workerPath: `${ocrPath}worker.min.js`,
-    corePath: `${ocrPath}core/`,
-    langPath: ocrPath,
-    logger: ({ status, progress }) => {
-      if (status === 'recognizing text') {
-        if (recognitionRound === 1) {
-          onProgress(Math.round(62 + 21 * progress), '正在读取并分析截图文字')
-        } else {
-          onProgress(Math.round(84 + 14 * progress), '正在增强并复核模糊文字')
+  workerPromise = import('tesseract.js').then(async ({ createWorker, OEM, PSM }) => {
+    const worker = await createWorker(['chi_sim', 'eng'], OEM.LSTM_ONLY, {
+      workerPath: `${ocrPath}worker.min.js`,
+      corePath: `${ocrPath}core/`,
+      langPath: ocrPath,
+      logger: ({ status, progress }) => {
+        if (!activeProgress) return
+        if (status === 'recognizing text') {
+          if (recognitionRound === 1) {
+            activeProgress(Math.round(55 + 38 * progress), '正在读取并分析截图文字')
+          } else {
+            activeProgress(Math.round(84 + 14 * progress), '正在增强并复核模糊文字')
+          }
+          return
         }
-        return
-      }
-      const [start, end] = statusRanges[status] ?? [0, 98]
-      onProgress(Math.round(start + (end - start) * progress), statusLabels[status] ?? '正在本地识别')
-    },
-  })
-
-  try {
+        const [start, end] = statusRanges[status] ?? [0, 54]
+        activeProgress(Math.min(54, Math.round(start + (end - start) * progress)), statusLabels[status] ?? '正在本地识别')
+      },
+    })
     await worker.setParameters({
       tessedit_pageseg_mode: PSM.SPARSE_TEXT,
       preserve_interword_spaces: '1',
       user_defined_dpi: '300',
     })
+    return worker
+  }).catch((error) => {
+    workerPromise = null
+    throw error
+  })
+  return workerPromise
+}
+
+const recognizePaymentImageNow = async (file: File, onProgress: OcrProgress) => {
+  const reusingWorker = workerPromise !== null
+  activeProgress = onProgress
+  recognitionRound = 1
+  if (reusingWorker) onProgress(8, '正在复用已加载的识别引擎')
+  const [worker, image] = await Promise.all([getWorker(), prepareImage(file)])
+
+  try {
     let { data } = await worker.recognize(image, { rotateAuto: true })
     const firstText = normalizeOcrText(data.text)
-    const keywordCount = firstText.match(/微信|支付宝|支付|付款|商户|订单|金额|时间|交易|收款/g)?.length ?? 0
-    if (data.confidence < 78 || keywordCount < 2) {
+    const foundAmount = /(?:¥|￥|关|羊|Y)\s*[0-9OoIl|SB,]+|[-−]\s*\d+[.。]\d{2}|\d+[.。]\d{1,2}\s*元/.test(firstText)
+    if (data.confidence < 60 || !foundAmount) {
       recognitionRound = 2
       convertToHighContrast(image)
       const retry = await worker.recognize(image)
@@ -171,6 +190,12 @@ export async function recognizePaymentImage(file: File, onProgress: OcrProgress)
     onProgress(100, '截图文字识别完成')
     return text
   } finally {
-    await worker.terminate()
+    activeProgress = null
   }
+}
+
+export function recognizePaymentImage(file: File, onProgress: OcrProgress) {
+  const task = recognitionQueue.then(() => recognizePaymentImageNow(file, onProgress))
+  recognitionQueue = task.then(() => undefined, () => undefined)
+  return task
 }

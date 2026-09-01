@@ -410,6 +410,7 @@ export function Dashboard({
           knownAccounts={knownAccounts}
           onClose={() => { setShowForm(false); setEditingTransaction(null) }}
           onSave={(input) => editingTransaction ? onUpdate(editingTransaction.id, input) : onAdd(input)}
+          onSaveBatch={onAddBatch}
           onSaved={showSavedRecord}
         />
       )}

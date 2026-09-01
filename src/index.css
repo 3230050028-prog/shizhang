@@ -295,6 +295,24 @@ a { color: inherit; text-decoration: none; }
 .ocr-progress > span { height: 5px; overflow: hidden; border-radius: 99px; background: #dfe9e1; }
 .ocr-progress i { display: block; height: 100%; border-radius: inherit; background: var(--green-600); transition: width .2s ease; }
 .ocr-progress small { color: var(--muted); font-size: 9px; text-align: center; }
+.ocr-batch-preview { display: grid; gap: 10px; padding: 11px; border: 1px solid #cfded3; border-radius: 11px; background: rgba(255,255,255,.92); }
+.ocr-batch-title { display: flex; align-items: center; gap: 8px; }
+.ocr-batch-title > span { display: grid; place-items: center; width: 30px; height: 30px; color: var(--green-700); border-radius: 9px; background: var(--green-50); }
+.ocr-batch-title b, .ocr-batch-title small { display: block; }
+.ocr-batch-title b { color: var(--ink); font-size: 11px; }
+.ocr-batch-title small { margin-top: 2px; color: var(--muted); font-size: 8px; }
+.ocr-batch-list { display: grid; gap: 8px; max-height: 330px; padding-right: 3px; overflow-y: auto; }
+.ocr-batch-list article { display: grid; gap: 8px; padding: 10px; border: 1px solid #e2e9e4; border-radius: 9px; background: #fafcf9; }
+.ocr-batch-row-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.ocr-batch-row-title > span { overflow: hidden; color: #5e6e65; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.ocr-batch-row-title > span.income { color: #2f7c55; }
+.ocr-batch-row-title button { display: grid; flex: 0 0 auto; place-items: center; width: 25px; height: 25px; padding: 0; color: #a26b5c; border: 0; border-radius: 7px; background: #fff1ed; }
+.ocr-batch-fields { display: grid; grid-template-columns: 1fr 1.35fr; gap: 8px; }
+.ocr-batch-list label { gap: 4px; font-size: 8px; }
+.ocr-batch-list input { height: 34px; padding: 0 8px; font-size: 10px; }
+.ocr-batch-save { min-height: 38px; color: white; border: 0; border-radius: 9px; background: var(--green-700); font-size: 11px; font-weight: 700; }
+.ocr-batch-save:hover { background: var(--green-800); }
+.ocr-batch-save:disabled { opacity: .65; cursor: wait; }
 .smart-entry textarea { width: 100%; min-height: 74px; padding: 11px 12px; resize: vertical; color: var(--ink); outline: 0; border: 1px solid #d6e1d8; border-radius: 10px; background: rgba(255,255,255,.9); font: inherit; font-size: 12px; line-height: 1.55; }
 .smart-entry textarea:focus { border-color: #80a88e; box-shadow: 0 0 0 3px rgba(62,123,91,.09); }
 .smart-entry-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
@@ -488,6 +506,7 @@ a { color: inherit; text-decoration: none; }
   .import-guide-tip { display: block; }
   .import-guide-tip b { display: block; margin-bottom: 2px; }
   .smart-entry-actions { grid-template-columns: 1fr; }
+  .ocr-batch-fields { grid-template-columns: 1fr; }
   .transaction-row > strong { font-size: 12px; }
 }
 
