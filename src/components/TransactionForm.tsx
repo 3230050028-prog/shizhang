@@ -1,8 +1,9 @@
-import { useState, type FormEvent } from 'react'
-import { ClipboardPaste, ShieldCheck, Sparkles, X } from 'lucide-react'
+import { useState, type ChangeEvent, type FormEvent } from 'react'
+import { ClipboardPaste, ImagePlus, ShieldCheck, Sparkles, X } from 'lucide-react'
 import { defaultAccounts, expenseCategories, incomeCategories } from '../data'
 import { toLocalDate } from '../lib/date'
 import { parseQuickEntry } from '../lib/quickEntry'
+import { recognizePaymentImage } from '../lib/imageOcr'
 import type { ActionResult, TransactionInput, TransactionType } from '../types'
 
 interface TransactionFormProps {
@@ -28,6 +29,10 @@ export function TransactionForm({ initial, knownCategories, knownAccounts, onClo
   const [smartText, setSmartText] = useState('')
   const [smartMessage, setSmartMessage] = useState('')
   const [smartError, setSmartError] = useState('')
+  const [ocrLoading, setOcrLoading] = useState(false)
+  const [ocrProgress, setOcrProgress] = useState(0)
+  const [ocrStatus, setOcrStatus] = useState('')
+  const [ocrFileName, setOcrFileName] = useState('')
   const defaultCategories = type === 'expense' ? expenseCategories : incomeCategories
   const categories = [...new Set([
     ...defaultCategories,
@@ -74,6 +79,39 @@ export function TransactionForm({ initial, knownCategories, knownAccounts, onClo
       setSmartError(reason instanceof Error && reason.message === '剪贴板中没有文字。'
         ? reason.message
         : '浏览器不允许自动读取剪贴板，请长按输入框后选择“粘贴”。')
+    }
+  }
+
+  const scanScreenshot = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+    if (!file.type.startsWith('image/')) {
+      setSmartError('请选择 PNG、JPG 或 HEIC 等图片文件。')
+      return
+    }
+    if (file.size > 15 * 1024 * 1024) {
+      setSmartError('图片超过 15MB，请先裁剪或压缩后再识别。')
+      return
+    }
+
+    setOcrLoading(true)
+    setOcrProgress(1)
+    setOcrStatus('正在读取截图')
+    setOcrFileName(file.name)
+    setSmartError('')
+    setSmartMessage('')
+    try {
+      const text = await recognizePaymentImage(file, (progress, status) => {
+        setOcrProgress(progress)
+        setOcrStatus(status)
+      })
+      setSmartText(text)
+      applySmartText(text)
+    } catch (reason) {
+      setSmartError(reason instanceof Error ? reason.message : '截图识别失败，请换一张清晰截图重试。')
+    } finally {
+      setOcrLoading(false)
     }
   }
 
@@ -133,6 +171,18 @@ export function TransactionForm({ initial, knownCategories, knownAccounts, onClo
                 <span><Sparkles size={17} /></span>
                 <div><b>半自动记账</b><small>粘贴支付通知或输入一句话，自动填好下面的表单</small></div>
               </div>
+              <label className={ocrLoading ? 'ocr-upload disabled' : 'ocr-upload'}>
+                <ImagePlus size={18} />
+                <span><b>{ocrFileName || '选择支付截图'}</b><small>支付宝或微信付款详情截图</small></span>
+                <em>{ocrLoading ? `${ocrProgress}%` : '本地识别'}</em>
+                <input type="file" accept="image/*" disabled={ocrLoading} onChange={(event) => void scanScreenshot(event)} />
+              </label>
+              {ocrLoading && (
+                <div className="ocr-progress" role="status">
+                  <span><i style={{ width: `${ocrProgress}%` }} /></span>
+                  <small>{ocrStatus}，请保持页面打开</small>
+                </div>
+              )}
               <textarea
                 value={smartText}
                 onChange={(event) => setSmartText(event.target.value)}
@@ -145,7 +195,7 @@ export function TransactionForm({ initial, knownCategories, knownAccounts, onClo
               </div>
               {smartMessage && <p className="smart-success">{smartMessage}</p>}
               {smartError && <p className="inline-error">{smartError}</p>}
-              <p className="smart-privacy"><ShieldCheck size={13} />文字只在当前设备处理，不会发送给AI或第三方。</p>
+              <p className="smart-privacy"><ShieldCheck size={13} />文字和截图只在当前设备处理，不会上传；首次截图识别需要加载本地模型。</p>
             </section>
           )}
 

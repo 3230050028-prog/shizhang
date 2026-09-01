@@ -9,13 +9,13 @@ export interface QuickEntryResult {
 
 const extractAmount = (text: string) => {
   const patterns = [
-    /(?:付款金额|支付金额|实付金额|订单金额|交易金额|金额|消费|支出|收入|收款|到账)[：:\s]*(?:¥|￥)?\s*(\d+(?:\.\d{1,2})?)/i,
-    /(?:¥|￥)\s*(\d+(?:\.\d{1,2})?)/,
-    /(\d+(?:\.\d{1,2})?)\s*元/,
+    /(?:付款金额|支付金额|实付金额|订单金额|交易金额|金额|消费|支出|收入|收款|到账)[：:\s]*(?:-|−)?\s*(?:¥|￥|关|羊|Y)?\s*([\d,]+(?:\.\d{1,2})?)/i,
+    /(?:-|−)?\s*(?:¥|￥|关|羊|Y)\s*([\d,]+(?:\.\d{1,2})?)/,
+    /([\d,]+(?:\.\d{1,2})?)\s*元/,
   ]
   for (const pattern of patterns) {
     const match = text.match(pattern)
-    if (match) return Number(match[1])
+    if (match) return Number(match[1].replace(/,/g, ''))
   }
   return 0
 }
@@ -58,7 +58,7 @@ const extractAccount = (text: string, fallback: string) => {
 }
 
 const cleanNote = (text: string) => {
-  const labeled = text.match(/(?:商户名称|交易对方|收款方|付款给|转账给|向)[：:\s]*([^\n，,。]+)/)
+  const labeled = text.match(/(?:商户名称|商户全称|交易对方|交易对象|收款方|商品说明|商品|付款给|转账给|向)[：:\s]*([^\n，,。]+)/)
   let note = labeled?.[1] ?? text
   note = note
     .replace(/20\d{2}[-/.年]\d{1,2}[-/.月]\d{1,2}(?:日)?(?:\s+\d{1,2}:\d{2}(?::\d{2})?)?/g, ' ')
@@ -74,7 +74,7 @@ const cleanNote = (text: string) => {
 }
 
 export const parseQuickEntry = (raw: string, fallbackAccount = '微信', now = new Date()): QuickEntryResult => {
-  const text = raw.trim()
+  const text = raw.trim().replace(/(?<=[\u3400-\u9fff])[ \t]+(?=[\u3400-\u9fff])/g, '')
   if (!text) throw new Error('请粘贴支付通知，或输入一句记账内容。')
   const amount = extractAmount(text)
   if (!amount || !Number.isFinite(amount)) throw new Error('没有识别到金额，请尝试写成“午饭35元，微信支付”。')
