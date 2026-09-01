@@ -32,8 +32,11 @@ const loadImage = (file: File) => new Promise<HTMLImageElement>((resolve, reject
 
 const prepareImage = async (file: File) => {
   const image = await loadImage(file)
-  const maxWidth = 1800
-  const scale = Math.min(1, maxWidth / image.naturalWidth)
+  const preferredScale = image.naturalWidth < 1600
+    ? Math.min(2, 1800 / image.naturalWidth)
+    : Math.min(1, 2000 / image.naturalWidth)
+  const pixelScale = Math.sqrt(8_000_000 / (image.naturalWidth * image.naturalHeight))
+  const scale = Math.min(preferredScale, pixelScale)
   const canvas = document.createElement('canvas')
   canvas.width = Math.max(1, Math.round(image.naturalWidth * scale))
   canvas.height = Math.max(1, Math.round(image.naturalHeight * scale))
@@ -41,30 +44,129 @@ const prepareImage = async (file: File) => {
   if (!context) throw new Error('当前浏览器无法处理截图。')
   context.fillStyle = '#ffffff'
   context.fillRect(0, 0, canvas.width, canvas.height)
+  context.imageSmoothingEnabled = true
+  context.imageSmoothingQuality = 'high'
+  context.filter = 'grayscale(1) contrast(1.3)'
   context.drawImage(image, 0, 0, canvas.width, canvas.height)
   return canvas
 }
 
+const convertToHighContrast = (canvas: HTMLCanvasElement) => {
+  const context = canvas.getContext('2d', { alpha: false, willReadFrequently: true })
+  if (!context) return
+  const image = context.getImageData(0, 0, canvas.width, canvas.height)
+  const histogram = new Uint32Array(256)
+  let weightedTotal = 0
+  for (let index = 0; index < image.data.length; index += 4) {
+    const brightness = Math.round(
+      image.data[index] * 0.299 + image.data[index + 1] * 0.587 + image.data[index + 2] * 0.114,
+    )
+    histogram[brightness] += 1
+    weightedTotal += brightness
+  }
+
+  const pixels = canvas.width * canvas.height
+  let backgroundWeight = 0
+  let backgroundTotal = 0
+  let bestVariance = -1
+  let threshold = 180
+  for (let value = 0; value < 256; value += 1) {
+    backgroundWeight += histogram[value]
+    if (!backgroundWeight) continue
+    const foregroundWeight = pixels - backgroundWeight
+    if (!foregroundWeight) break
+    backgroundTotal += value * histogram[value]
+    const backgroundMean = backgroundTotal / backgroundWeight
+    const foregroundMean = (weightedTotal - backgroundTotal) / foregroundWeight
+    const variance = backgroundWeight * foregroundWeight * (backgroundMean - foregroundMean) ** 2
+    if (variance > bestVariance) {
+      bestVariance = variance
+      threshold = value
+    }
+  }
+
+  threshold = Math.min(210, Math.max(125, threshold + 8))
+  for (let index = 0; index < image.data.length; index += 4) {
+    const brightness = image.data[index]
+    const value = brightness < threshold ? 0 : 255
+    image.data[index] = value
+    image.data[index + 1] = value
+    image.data[index + 2] = value
+    image.data[index + 3] = 255
+  }
+  context.putImageData(image, 0, 0)
+}
+
+const normalizeOcrText = (text: string) => {
+  const lines = text
+    .replace(/(?<=[\u3400-\u9fff])[ \t]+(?=[\u3400-\u9fff])/g, '')
+    .replace(/(?:文付|支村)(?=方式|时间|金额)/g, '支付')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => {
+      const latinLetters = line.match(/[a-z]/gi)?.length ?? 0
+      const meaningfulCharacters = line.match(/[\p{L}\p{N}\u3400-\u9fff]/gu)?.length ?? 0
+      if (latinLetters <= 2 && meaningfulCharacters <= 2 && !/\d/.test(line)) return false
+      return meaningfulCharacters > 0
+    })
+  const looksLikePayment = lines.some((line) => /(?:¥|￥)\s*\d|20\d{2}[-/.年]\d{1,2}/.test(line))
+  return lines
+    .filter((line, index) => !(looksLikePayment && index < 3 && /^[A-Z]{2,6}$/.test(line)))
+    .join('\n')
+    .trim()
+}
+
+const recognitionScore = (text: string, confidence: number) => {
+  const keywords = text.match(/微信|支付宝|支付|付款|商户|订单|金额|时间|交易|收款/g)?.length ?? 0
+  const hasAmount = /(?:¥|￥|\d)[\s\d,.]*\d/.test(text)
+  const hasDate = /20\d{2}[-/.年]\d{1,2}/.test(text)
+  return confidence + Math.min(keywords, 6) * 4 + (hasAmount ? 4 : 0) + (hasDate ? 4 : 0)
+}
+
 export async function recognizePaymentImage(file: File, onProgress: OcrProgress) {
-  const [{ createWorker, OEM }, image] = await Promise.all([
+  let recognitionRound = 1
+  const [{ createWorker, OEM, PSM }, image] = await Promise.all([
     import('tesseract.js'),
     prepareImage(file),
   ])
   const baseUrl = new URL(import.meta.env.BASE_URL, window.location.origin)
   const ocrPath = new URL('ocr/', baseUrl).href
-  const worker = await createWorker('chi_sim', OEM.LSTM_ONLY, {
+  const worker = await createWorker(['chi_sim', 'eng'], OEM.LSTM_ONLY, {
     workerPath: `${ocrPath}worker.min.js`,
     corePath: `${ocrPath}core/`,
     langPath: ocrPath,
     logger: ({ status, progress }) => {
+      if (status === 'recognizing text') {
+        if (recognitionRound === 1) {
+          onProgress(Math.round(62 + 21 * progress), '正在读取并分析截图文字')
+        } else {
+          onProgress(Math.round(84 + 14 * progress), '正在增强并复核模糊文字')
+        }
+        return
+      }
       const [start, end] = statusRanges[status] ?? [0, 98]
       onProgress(Math.round(start + (end - start) * progress), statusLabels[status] ?? '正在本地识别')
     },
   })
 
   try {
-    const { data } = await worker.recognize(image, { rotateAuto: true })
-    const text = data.text.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim()
+    await worker.setParameters({
+      tessedit_pageseg_mode: PSM.SPARSE_TEXT,
+      preserve_interword_spaces: '1',
+      user_defined_dpi: '300',
+    })
+    let { data } = await worker.recognize(image, { rotateAuto: true })
+    const firstText = normalizeOcrText(data.text)
+    const keywordCount = firstText.match(/微信|支付宝|支付|付款|商户|订单|金额|时间|交易|收款/g)?.length ?? 0
+    if (data.confidence < 78 || keywordCount < 2) {
+      recognitionRound = 2
+      convertToHighContrast(image)
+      const retry = await worker.recognize(image)
+      if (recognitionScore(retry.data.text, retry.data.confidence) > recognitionScore(data.text, data.confidence)) {
+        data = retry.data
+      }
+    }
+    const text = normalizeOcrText(data.text)
     if (!text) throw new Error('没有从截图中读到文字，请换一张更清晰的截图。')
     onProgress(100, '截图文字识别完成')
     return text

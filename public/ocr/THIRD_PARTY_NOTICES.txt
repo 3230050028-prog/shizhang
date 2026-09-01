@@ -5,7 +5,8 @@ Copyright the Tesseract.js contributors
 Licensed under the Apache License 2.0.
 Source: https://github.com/naptha/tesseract.js
 
-Simplified Chinese trained data distributed by @tesseract.js-data/chi_sim 1.0.0
+Simplified Chinese and English trained data distributed by
+@tesseract.js-data/chi_sim 1.0.0 and @tesseract.js-data/eng 1.0.0
 Licensed under the MIT License. The underlying Tesseract trained data is provided
 by the Tesseract OCR project under its applicable open-source terms.
 Source: https://github.com/naptha/tessdata
