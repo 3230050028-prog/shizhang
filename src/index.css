@@ -303,20 +303,25 @@ a { color: inherit; text-decoration: none; }
 .ocr-batch-title small { margin-top: 2px; color: var(--muted); font-size: 8px; }
 .ocr-review-summary { display: flex; align-items: center; gap: 6px; margin: 0; padding: 8px 9px; color: #8a5b1f; border: 1px solid #ead7b6; border-radius: 8px; background: #fff8e9; font-size: 9px; line-height: 1.4; }
 .ocr-duplicate-summary { display: flex; align-items: center; gap: 6px; margin: 0; padding: 8px 9px; color: #35624a; border: 1px solid #c9ded0; border-radius: 8px; background: #eef7f1; font-size: 9px; line-height: 1.4; }
+.ocr-selection-bar { display: flex; align-items: center; gap: 6px; }
+.ocr-selection-bar span { margin-right: auto; color: #58675e; font-size: 9px; font-weight: 700; }
+.ocr-selection-bar button { min-height: 27px; padding: 0 8px; color: var(--green-700); border: 1px solid #c9d8cd; border-radius: 7px; background: white; font-size: 8px; font-weight: 700; }
 .ocr-batch-list { display: grid; gap: 8px; max-height: 330px; padding-right: 3px; overflow-y: auto; }
 .ocr-batch-list article { display: grid; gap: 8px; padding: 10px; border: 1px solid #e2e9e4; border-radius: 9px; background: #fafcf9; }
 .ocr-batch-list article.is-duplicate { border-color: #d8cda8; background: #fffbef; }
+.ocr-batch-list article.is-excluded { opacity: .58; }
 .ocr-batch-row-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .ocr-batch-row-title > span { overflow: hidden; color: #5e6e65; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
 .ocr-batch-row-title > span.income { color: #2f7c55; }
 .ocr-batch-row-title button { display: grid; flex: 0 0 auto; place-items: center; width: 25px; height: 25px; padding: 0; color: #a26b5c; border: 0; border-radius: 7px; background: #fff1ed; }
 .ocr-item-warning { display: flex; align-items: center; gap: 4px; margin: -2px 0 0; color: #9a641e; font-size: 8px; line-height: 1.4; }
+.ocr-candidate-choice { display: flex; align-items: center; gap: 7px; width: max-content; color: #4e6055; font-size: 9px !important; cursor: pointer; }
 .ocr-duplicate-badge { width: max-content; margin: -2px 0 0; padding: 3px 6px; color: #7a6124; border-radius: 99px; background: #f4e8bd; font-size: 8px; font-weight: 700; }
 .ocr-batch-fields { display: grid; grid-template-columns: 1fr 1.35fr; gap: 8px; }
 .ocr-batch-list label { gap: 4px; font-size: 8px; }
 .ocr-batch-list input { height: 34px; padding: 0 8px; font-size: 10px; }
 .ocr-review-confirm { display: flex; align-items: center; gap: 7px; color: #4e6055; font-size: 9px; line-height: 1.4; cursor: pointer; }
-.ocr-review-confirm input, .ocr-duplicate-choice input { width: 15px; height: 15px; margin: 0; accent-color: var(--green-700); }
+.ocr-review-confirm input, .ocr-duplicate-choice input, .ocr-candidate-choice input { width: 15px; height: 15px; margin: 0; accent-color: var(--green-700); }
 .ocr-duplicate-choice { display: flex; align-items: center; gap: 7px; color: #6c5722; font-size: 9px !important; cursor: pointer; }
 .ocr-save-report { display: flex; flex-wrap: wrap; gap: 6px 10px; padding: 9px 10px; color: #315f46; border: 1px solid #c9ded0; border-radius: 8px; background: #eef7f1; font-size: 9px; }
 .ocr-save-report b { width: 100%; }

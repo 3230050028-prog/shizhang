@@ -39,6 +39,7 @@ export function TransactionForm({ initial, transactions, knownCategories, knownA
   const [ocrCandidates, setOcrCandidates] = useState<TransactionInput[]>([])
   const [ocrWarnings, setOcrWarnings] = useState<string[][]>([])
   const [ocrReviewed, setOcrReviewed] = useState(false)
+  const [includeCandidates, setIncludeCandidates] = useState<boolean[]>([])
   const [keepDuplicates, setKeepDuplicates] = useState<boolean[]>([])
   const [batchResult, setBatchResult] = useState<{ saved: number; skipped: number; failed: number } | null>(null)
   const [batchSaving, setBatchSaving] = useState(false)
@@ -53,7 +54,10 @@ export function TransactionForm({ initial, transactions, knownCategories, knownA
     })
   }, [ocrCandidates, transactions])
   const duplicateCount = duplicateFlags.filter(Boolean).length
-  const selectedCandidateCount = ocrCandidates.filter((_, index) => !duplicateFlags[index] || keepDuplicates[index]).length
+  const isCandidateSelected = (index: number) => includeCandidates[index] !== false && (!duplicateFlags[index] || keepDuplicates[index])
+  const selectedCandidateCount = ocrCandidates.filter((_, index) => isCandidateSelected(index)).length
+  const selectedReviewIssueCount = ocrWarnings.filter((warnings, index) => isCandidateSelected(index) && warnings.length > 0).length
+  const trustedCandidateCount = ocrCandidates.filter((_, index) => !duplicateFlags[index] && !(ocrWarnings[index]?.length)).length
   const defaultCategories = type === 'expense' ? expenseCategories : incomeCategories
   const categories = [...new Set([
     ...defaultCategories,
@@ -78,6 +82,7 @@ export function TransactionForm({ initial, transactions, knownCategories, knownA
     setOcrCandidates([])
     setOcrWarnings([])
     setOcrReviewed(false)
+    setIncludeCandidates([])
     setKeepDuplicates([])
     setBatchResult(null)
     try {
@@ -130,6 +135,7 @@ export function TransactionForm({ initial, transactions, knownCategories, knownA
     setOcrCandidates([])
     setOcrWarnings([])
     setOcrReviewed(false)
+    setIncludeCandidates([])
     setKeepDuplicates([])
     setBatchResult(null)
     try {
@@ -143,17 +149,21 @@ export function TransactionForm({ initial, transactions, knownCategories, knownA
         setOcrCandidates(results.map((result) => result.input))
         setOcrWarnings(results.map((result) => result.warnings))
         setOcrReviewed(false)
+        setIncludeCandidates(results.map(() => true))
         setKeepDuplicates(results.map(() => false))
         setSmartMessage(`从截图中识别到 ${results.length} 笔账目，请逐笔检查后批量保存。`)
       } else if (results.length === 1) {
         const result = results[0]
         const duplicate = transactions.some((item) => transactionFingerprint(item) === transactionFingerprint(result.input))
-        if (duplicate) {
+        if (duplicate || result.warnings.length > 0) {
           setOcrCandidates([result.input])
           setOcrWarnings([result.warnings])
+          setIncludeCandidates([true])
           setKeepDuplicates([false])
           setOcrReviewed(false)
-          setSmartMessage('这笔账目疑似已经存在，默认不会重复保存。')
+          setSmartMessage(duplicate
+            ? '这笔账目疑似已经存在，默认不会重复保存。'
+            : '这笔账目有需要核对的内容，请确认后再保存。')
         } else {
           setOcrCandidates([])
           setOcrWarnings([])
@@ -177,6 +187,14 @@ export function TransactionForm({ initial, transactions, knownCategories, knownA
 
   const updateOcrCandidate = (index: number, patch: Partial<TransactionInput>) => {
     setOcrCandidates((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, ...patch } : item))
+    setOcrWarnings((current) => current.map((warnings, itemIndex) => itemIndex === index
+      ? warnings.filter((warning) => {
+        if (patch.occurred_on && warning.includes('日期')) return false
+        if (patch.note?.trim() && warning.includes('商户')) return false
+        if (patch.amount !== undefined && patch.amount < 5000 && warning.includes('金额较大')) return false
+        return true
+      })
+      : warnings))
     setOcrReviewed(false)
     setKeepDuplicates((current) => current.map((keep, itemIndex) => itemIndex === index ? false : keep))
     setBatchResult(null)
@@ -185,21 +203,22 @@ export function TransactionForm({ initial, transactions, knownCategories, knownA
   const removeOcrCandidate = (index: number) => {
     setOcrCandidates((current) => current.filter((_, itemIndex) => itemIndex !== index))
     setOcrWarnings((current) => current.filter((_, itemIndex) => itemIndex !== index))
+    setIncludeCandidates((current) => current.filter((_, itemIndex) => itemIndex !== index))
     setKeepDuplicates((current) => current.filter((_, itemIndex) => itemIndex !== index))
     setOcrReviewed(false)
     setBatchResult(null)
   }
 
   const saveOcrCandidates = async () => {
-    if (!ocrCandidates.length || ocrCandidates.some((item) => !item.amount || !item.occurred_on)) {
+    const selected = ocrCandidates.filter((_, index) => isCandidateSelected(index))
+    if (!ocrCandidates.length || selected.some((item) => !item.amount || !item.occurred_on)) {
       setSmartError('请检查每笔账目的金额和日期。')
       return
     }
-    if (reviewIssueCount > 0 && !ocrReviewed) {
+    if (selectedReviewIssueCount > 0 && !ocrReviewed) {
       setSmartError('请先检查标记的账目，并勾选“我已核对”。')
       return
     }
-    const selected = ocrCandidates.filter((_, index) => !duplicateFlags[index] || keepDuplicates[index])
     const skipped = ocrCandidates.length - selected.length
     if (!selected.length) {
       setSmartError('这些账目都已经存在。如确实需要再次保存，请勾选“仍然保存”。')
@@ -314,13 +333,41 @@ export function TransactionForm({ initial, transactions, knownCategories, knownA
                   {duplicateCount > 0 && (
                     <p className="ocr-duplicate-summary"><ShieldCheck size={14} />发现 {duplicateCount} 笔疑似重复，默认不会再次保存</p>
                   )}
+                  <div className="ocr-selection-bar">
+                    <span>已选 {selectedCandidateCount} / {ocrCandidates.length} 笔</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIncludeCandidates(ocrCandidates.map((_, index) => !duplicateFlags[index] && !(ocrWarnings[index]?.length)))
+                        setKeepDuplicates(ocrCandidates.map(() => false))
+                        setOcrReviewed(false)
+                        setBatchResult(null)
+                      }}
+                    >只选可信 {trustedCandidateCount} 笔</button>
+                    <button type="button" onClick={() => { setIncludeCandidates(ocrCandidates.map(() => true)); setBatchResult(null) }}>全选</button>
+                  </div>
                   <div className="ocr-batch-list">
                     {ocrCandidates.map((item, index) => (
-                      <article className={duplicateFlags[index] ? 'is-duplicate' : ''} key={`${index}-${item.amount}-${item.occurred_on}`}>
+                      <article
+                        className={[duplicateFlags[index] ? 'is-duplicate' : '', includeCandidates[index] === false ? 'is-excluded' : ''].filter(Boolean).join(' ')}
+                        key={`${index}-${item.amount}-${item.occurred_on}`}
+                      >
                         <div className="ocr-batch-row-title">
                           <span className={item.type}>{item.type === 'income' ? '收入' : '支出'} · {item.category} · {item.account}</span>
                           <button type="button" onClick={() => removeOcrCandidate(index)} aria-label={`删除第 ${index + 1} 笔`}><Trash2 size={14} /></button>
                         </div>
+                        <label className="ocr-candidate-choice">
+                          <input
+                            type="checkbox"
+                            checked={includeCandidates[index] !== false}
+                            onChange={(event) => {
+                              setIncludeCandidates((current) => current.map((included, itemIndex) => itemIndex === index ? event.target.checked : included))
+                              setOcrReviewed(false)
+                              setBatchResult(null)
+                            }}
+                          />
+                          本次保存
+                        </label>
                         {duplicateFlags[index] && <p className="ocr-duplicate-badge">疑似已存在</p>}
                         {ocrWarnings[index]?.map((warning) => <p className="ocr-item-warning" key={warning}><AlertTriangle size={11} />{warning}</p>)}
                         <div className="ocr-batch-fields">
@@ -344,7 +391,7 @@ export function TransactionForm({ initial, transactions, knownCategories, knownA
                       </article>
                     ))}
                   </div>
-                  {reviewIssueCount > 0 && (
+                  {selectedReviewIssueCount > 0 && (
                     <label className="ocr-review-confirm"><input type="checkbox" checked={ocrReviewed} onChange={(event) => setOcrReviewed(event.target.checked)} />我已核对标记的金额、日期和商户</label>
                   )}
                   {batchResult && (
@@ -358,7 +405,7 @@ export function TransactionForm({ initial, transactions, knownCategories, knownA
                   <button
                     className="ocr-batch-save"
                     type="button"
-                    disabled={batchSaving || (!batchResult && (selectedCandidateCount === 0 || (reviewIssueCount > 0 && !ocrReviewed)))}
+                    disabled={batchSaving || (!batchResult && (selectedCandidateCount === 0 || (selectedReviewIssueCount > 0 && !ocrReviewed)))}
                     onClick={() => batchResult && batchResult.failed === 0 ? onClose() : void saveOcrCandidates()}
                   >
                     {batchSaving
