@@ -88,8 +88,11 @@ const findColumn = (headers: string[], candidates: string[]) =>
 
 const valueAt = (row: string[], index: number) => index >= 0 ? (row[index] ?? '').trim() : ''
 
-export const transactionFingerprint = (row: TransactionInput) =>
-  [row.occurred_on, row.type, Number(row.amount).toFixed(2), row.account.trim(), row.note.trim()].join('|')
+export const transactionFingerprint = (row: TransactionInput) => {
+  const merchant = row.note.trim().replace(/\s+/g, '').toLocaleLowerCase('zh-CN')
+    || `${row.category.trim()}|${row.account.trim()}`
+  return [row.occurred_on, row.type, Number(row.amount).toFixed(2), merchant].join('|')
+}
 
 export const parsePaymentStatement = (text: string): PaymentImportResult => {
   const sample = text.split(/\r?\n/).slice(0, 30).join('\n')

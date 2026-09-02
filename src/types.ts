@@ -48,4 +48,6 @@ export interface SavedAccount {
 export interface ActionResult {
   ok: boolean
   error?: string
+  saved?: number
+  failed?: number
 }

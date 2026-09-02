@@ -406,6 +406,7 @@ export function Dashboard({
       {(showForm || editingTransaction) && (
         <TransactionForm
           initial={editingTransaction ?? undefined}
+          transactions={transactions}
           knownCategories={knownCategories}
           knownAccounts={knownAccounts}
           onClose={() => { setShowForm(false); setEditingTransaction(null) }}

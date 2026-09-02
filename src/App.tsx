@@ -287,7 +287,7 @@ function App() {
     inputs: TransactionInput[],
     onProgress?: (completed: number) => void,
   ): Promise<ActionResult> => {
-    if (!inputs.length) return { ok: true }
+    if (!inputs.length) return { ok: true, saved: 0, failed: 0 }
 
     if (!supabase || !session) {
       const now = new Date().toISOString()
@@ -295,7 +295,7 @@ function App() {
       setTransactions((current) => [...created, ...current])
       void persistImportMetadata(inputs)
       onProgress?.(inputs.length)
-      return { ok: true }
+      return { ok: true, saved: inputs.length, failed: 0 }
     }
 
     const batchSize = 100
@@ -307,7 +307,7 @@ function App() {
           .from('transactions')
           .insert(batch.map((input) => ({ ...input, user_id: session.user.id })))
           .select()
-        if (error) return failure(`已导入 ${completed} 笔，后续保存失败`, error)
+        if (error) return { ...failure(`已导入 ${completed} 笔，后续保存失败`, error), saved: completed, failed: inputs.length - completed }
         const saved = (data as Transaction[] | null) ?? []
         setTransactions((current) => [...saved, ...current])
         completed += saved.length
@@ -315,9 +315,9 @@ function App() {
       }
 
       void persistImportMetadata(inputs)
-      return { ok: true }
+      return { ok: true, saved: completed, failed: 0 }
     } catch (error) {
-      return failure(`已导入 ${completed} 笔，后续保存失败`, error)
+      return { ...failure(`已导入 ${completed} 笔，后续保存失败`, error), saved: completed, failed: inputs.length - completed }
     }
   }
 
