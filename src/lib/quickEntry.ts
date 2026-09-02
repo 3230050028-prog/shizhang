@@ -5,6 +5,7 @@ import type { TransactionInput, TransactionType } from '../types'
 export interface QuickEntryResult {
   input: TransactionInput
   recognized: string[]
+  warnings: string[]
 }
 
 const extractAmount = (text: string) => {
@@ -166,6 +167,7 @@ export const parseQuickEntry = (raw: string, fallbackAccount = '微信', now = n
   return {
     input: { type, amount, category, account, note, occurred_on },
     recognized,
+    warnings: [],
   }
 }
 
@@ -200,7 +202,7 @@ export const parseQuickEntries = (raw: string, fallbackAccount = '微信', now =
     .map((item) => item.index))
   const amountLines = detectedAmountLines.filter((item) => !summaryAmountIndexes.has(item.index))
 
-  if (detectedAmountLines.length < 2) return [parseQuickEntry(text, fallbackAccount, now)]
+  if (detectedAmountLines.length === 0) return [parseQuickEntry(text, fallbackAccount, now)]
 
   const results: Array<QuickEntryResult & { sourceIndex: number }> = []
   const recentAmounts = new Map<number, number>()
@@ -226,6 +228,7 @@ export const parseQuickEntries = (raw: string, fallbackAccount = '微信', now =
       if (summaryAmountIndexes.has(absoluteIndex) || summaryTextPattern.test(line)) return false
       return absoluteIndex === item.index || !amountLines.some((amountLine) => amountLine.index === absoluteIndex)
     }).join('\n')
+    let dateWasInferred = false
     if (!extractExplicitDate(context, now)) {
       const nextHeaderOffset = lines.slice(item.index + 1).findIndex((line) => monthHeaderPattern.test(line))
       const sectionEnd = nextHeaderOffset === -1 ? lines.length : item.index + 1 + nextHeaderOffset
@@ -233,6 +236,7 @@ export const parseQuickEntries = (raw: string, fallbackAccount = '微信', now =
       const followingDate = lines.slice(item.index + 1, sectionEnd).find((line) => extractExplicitDate(line, now))
       const dateHeader = previousDate ?? followingDate
       if (dateHeader) context = `${dateHeader}\n${context}`
+      else dateWasInferred = true
     }
 
     try {
@@ -240,6 +244,13 @@ export const parseQuickEntries = (raw: string, fallbackAccount = '微信', now =
         : /(?:^|\s)[-−—]\s*(?:¥|￥|关|羊|Y)?\s*\d/.test(item.line) ? '支出' : ''
       const amountLabel = signedType ? `${signedType}金额` : '金额'
       const result = parseQuickEntry(`${amountLabel} ¥${item.amount.toFixed(2)}\n${context}`, fallbackAccount, now)
+      if (dateWasInferred) result.warnings.push('未识别到账单日期，暂时使用今天')
+      const hanCharacters = result.input.note.match(/\p{Script=Han}/gu)?.length ?? 0
+      const latinCharacters = result.input.note.match(/[a-z]/gi)?.length ?? 0
+      if (!result.input.note || (hanCharacters === 0 && latinCharacters >= 2)) {
+        result.warnings.push('商户名称可能没有识别清楚')
+      }
+      if (result.input.amount >= 5000) result.warnings.push('金额较大，请确认不是合计金额')
       results.push({ ...result, sourceIndex: item.index })
     } catch {
       // A single unreadable row should not prevent other rows from being offered.
