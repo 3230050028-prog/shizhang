@@ -115,8 +115,18 @@ export function TransactionForm({ initial, knownCategories, knownAccounts, onClo
       if (results.length > 1) {
         setOcrCandidates(results.map((result) => result.input))
         setSmartMessage(`从截图中识别到 ${results.length} 笔账目，请逐笔检查后批量保存。`)
+      } else if (results.length === 1) {
+        const result = results[0]
+        setOcrCandidates([])
+        setType(result.input.type)
+        setAmount(String(result.input.amount))
+        setCategory(result.input.category)
+        setAccount(result.input.account)
+        setNote(result.input.note)
+        setDate(result.input.occurred_on)
+        setSmartMessage(`已识别：${result.recognized.join(' · ')}。请检查后保存。`)
       } else {
-        applySmartText(text)
+        setSmartError('没有识别到可保存的明细，请避免只截取收入、支出合计区域。')
       }
     } catch (reason) {
       setSmartError(reason instanceof Error ? reason.message : '截图识别失败，请换一张清晰截图重试。')

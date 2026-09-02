@@ -41,7 +41,7 @@ const validDate = (year: number, month: number, day: number) => {
   return toLocalDate(date)
 }
 
-const extractDate = (text: string, now: Date) => {
+const extractExplicitDate = (text: string, now: Date) => {
   const relativeDate = new Date(now)
   if (/(?:今天|今日|今晚|今早|今晨|今夜)/.test(text)) return toLocalDate(relativeDate)
   if (text.includes('前天')) {
@@ -53,22 +53,40 @@ const extractDate = (text: string, now: Date) => {
     return toLocalDate(relativeDate)
   }
 
-  const full = text.match(/([2Z][0-9OoIl|]{3})[-/.年]([0-9OoIl|]{1,2})[-/.月]([0-9OoIl|]{1,2})日?/)
-  if (full) {
-    const parsed = validDate(
-      normalizeDateNumber(full[1].replace(/^Z/, '2')),
-      normalizeDateNumber(full[2]),
-      normalizeDateNumber(full[3]),
-    )
-    if (parsed) return parsed
+  const compactLines = text.split('\n').map((line) => line.replace(/\s+/g, ''))
+  for (const line of compactLines) {
+    const full = line.match(/([2Z][0-9OoIl|]{3})[-/.年]([0-9OoIl|]{1,2})[-/.月]([0-9OoIl|]{1,2})日?/)
+    if (full) {
+      const parsed = validDate(
+        normalizeDateNumber(full[1].replace(/^Z/, '2')),
+        normalizeDateNumber(full[2]),
+        normalizeDateNumber(full[3]),
+      )
+      if (parsed) return parsed
+    }
   }
 
-  const monthDays = text.matchAll(/(?:^|[^0-9OoIl|])([0-9OoIl|]{1,2})[-/.月]([0-9OoIl|]{1,2})日?/g)
-  for (const monthDay of monthDays) {
-    const parsed = validDate(now.getFullYear(), normalizeDateNumber(monthDay[1]), normalizeDateNumber(monthDay[2]))
-    if (parsed) return parsed
+  for (const line of compactLines) {
+    const monthDay = line.match(/^(?:(?:日期|交易日期|交易时间|支付时间)[：:]?)?([0-9OoIl|]{1,2})(?:[-/.]|月)([0-9OoIl|]{1,2})[日号]?(?:(?:星期|周)[一二三四五六日天])?(?:\d{1,2}:\d{2})?$/)
+    if (!monthDay) continue
+    const month = normalizeDateNumber(monthDay[1])
+    const day = normalizeDateNumber(monthDay[2])
+    const parsed = validDate(now.getFullYear(), month, day)
+    if (!parsed) continue
+    const candidate = new Date(now.getFullYear(), month - 1, day)
+    const futureLimit = new Date(now)
+    futureLimit.setDate(futureLimit.getDate() + 31)
+    if (candidate > futureLimit) return validDate(now.getFullYear() - 1, month, day)
+    return parsed
   }
 
+  return null
+}
+
+const extractDate = (text: string, now: Date) => {
+  const explicit = extractExplicitDate(text, now)
+  if (explicit) return explicit
+  const relativeDate = new Date(now)
   return toLocalDate(relativeDate)
 }
 
@@ -94,6 +112,7 @@ const cleanNote = (text: string) => {
       .replace(/(?:¥|￥|关|羊|Y)\s*[0-9OoIl|SB,]+(?:[.。][0-9OoIl|SB]{1,2})?\s*元?/gi, ' ')
       .replace(/(?:^|\s)[-−]?\s*\d[\d,]*(?:[.。]\d{1,2})?\s*元?(?=\s|$)/g, ' ')
       .replace(/(?:[2Z][0-9OoIl|]{3})[-/.年][0-9OoIl|]{1,2}[-/.月][0-9OoIl|]{1,2}(?:日)?(?:\s+\d{1,2}:\d{2}(?::\d{2})?)?/g, ' ')
+      .replace(/^\s*(?:(?:日期|交易日期|交易时间|支付时间)[：:]?\s*)?[0-9OoIl|]{1,2}\s*(?:[-/.]|月)\s*[0-9OoIl|]{1,2}\s*[日号]?(?:\s*(?:星期|周)[一二三四五六日天])?(?:\s*\d{1,2}:\d{2})?\s*$/g, ' ')
       .replace(/(?:今天|今日|今晚|今早|今晨|今夜|昨天|前天|上午|中午|下午|晚上|凌晨)|\b\d{1,2}:\d{2}(?::\d{2})?\b/g, ' ')
       .replace(/支付成功|交易成功|付款成功|订单详情|账单详情|微信支付|支付宝/g, ' ')
       .replace(/[：:，,。；;—|{}-]+/g, ' ')
@@ -109,6 +128,7 @@ const cleanNote = (text: string) => {
   let note = labeled?.[1] ?? lineCandidates[0] ?? text
   note = note
     .replace(/20\d{2}[-/.年]\d{1,2}[-/.月]\d{1,2}(?:日)?(?:\s+\d{1,2}:\d{2}(?::\d{2})?)?/g, ' ')
+    .replace(/^\s*(?:(?:日期|交易日期|交易时间|支付时间)[：:]?\s*)?[0-9OoIl|]{1,2}\s*(?:[-/.]|月)\s*[0-9OoIl|]{1,2}\s*[日号]?(?:\s*(?:星期|周)[一二三四五六日天])?(?:\s*\d{1,2}:\d{2})?\s*$/g, ' ')
     .replace(/(?:今天|今日|今晚|今早|今晨|今夜|昨天|前天|刚刚|上午|中午|下午|晚上|凌晨)/g, ' ')
     .replace(/(?:付款金额|支付金额|实付金额|订单金额|交易金额|金额)[：:\s]*(?:¥|￥)?\s*\d+(?:\.\d{1,2})?/gi, ' ')
     .replace(/(?:¥|￥)?\s*\d+(?:\.\d{1,2})?\s*元?/g, ' ')
@@ -151,14 +171,29 @@ const looseLineAmount = (line: string) => {
   return match ? Number(match[1].replace(/,/g, '')) : 0
 }
 
+const summaryTextPattern = /(?:当日|本日|今日|每日|本月|当月|每月|月度)\s*(?:总)?\s*(?:收入|支出)|总收入|总支出|收入合计|支出合计|收支合计|收入总计|支出总计|合计收入|合计支出|(?:收入|支出)\s*\d+\s*笔/
+
+const isSummaryAmount = (lines: string[], index: number) => {
+  const adjacent = lines.slice(Math.max(0, index - 1), Math.min(lines.length, index + 2))
+  if (summaryTextPattern.test(adjacent.join(' '))) return true
+  const immediateType = [lines[index - 1], lines[index + 1]].find((line) => /^(?:收入|支出)$/.test(line ?? ''))
+  if (!immediateType) return false
+  const nearby = lines.slice(Math.max(0, index - 3), Math.min(lines.length, index + 4))
+  return nearby.some((line) => /^(?:收入|支出)$/.test(line) && line !== immediateType)
+}
+
 export const parseQuickEntries = (raw: string, fallbackAccount = '微信', now = new Date()): QuickEntryResult[] => {
   const text = raw.trim().replace(/(?<=[\u3400-\u9fff])[ \t]+(?=[\u3400-\u9fff])/g, '')
   const lines = text.split('\n').map((line) => line.trim()).filter(Boolean)
-  const amountLines = lines
+  const detectedAmountLines = lines
     .map((line, index) => ({ amount: looseLineAmount(line), index, line }))
     .filter((item) => item.amount > 0 && Number.isFinite(item.amount))
+  const summaryAmountIndexes = new Set(detectedAmountLines
+    .filter((item) => isSummaryAmount(lines, item.index))
+    .map((item) => item.index))
+  const amountLines = detectedAmountLines.filter((item) => !summaryAmountIndexes.has(item.index))
 
-  if (amountLines.length < 2) return [parseQuickEntry(text, fallbackAccount, now)]
+  if (detectedAmountLines.length < 2) return [parseQuickEntry(text, fallbackAccount, now)]
 
   const results: Array<QuickEntryResult & { sourceIndex: number }> = []
   const recentAmounts = new Map<number, number>()
@@ -174,10 +209,15 @@ export const parseQuickEntries = (raw: string, fallbackAccount = '微信', now =
     const nextIndex = amountLines[position + 1]?.index
     const start = previousIndex === undefined ? Math.max(0, item.index - 4) : Math.floor((previousIndex + item.index) / 2) + 1
     const end = nextIndex === undefined ? Math.min(lines.length, item.index + 5) : Math.floor((item.index + nextIndex) / 2) + 1
-    const context = lines.slice(start, end).filter((_, offset) => {
+    let context = lines.slice(start, end).filter((line, offset) => {
       const absoluteIndex = start + offset
+      if (summaryAmountIndexes.has(absoluteIndex) || summaryTextPattern.test(line)) return false
       return absoluteIndex === item.index || !amountLines.some((amountLine) => amountLine.index === absoluteIndex)
     }).join('\n')
+    if (!extractExplicitDate(context, now)) {
+      const dateHeader = lines.slice(0, item.index + 1).reverse().find((line) => extractExplicitDate(line, now))
+      if (dateHeader) context = `${dateHeader}\n${context}`
+    }
 
     try {
       const result = parseQuickEntry(`金额 ¥${item.amount.toFixed(2)}\n${context}`, fallbackAccount, now)
