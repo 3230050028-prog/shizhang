@@ -55,7 +55,7 @@ const extractExplicitDate = (text: string, now: Date) => {
 
   const compactLines = text.split('\n').map((line) => line.replace(/\s+/g, ''))
   for (const line of compactLines) {
-    const full = line.match(/([2Z][0-9OoIl|]{3})[-/.年]([0-9OoIl|]{1,2})[-/.月]([0-9OoIl|]{1,2})日?/)
+    const full = line.match(/([2Z][0Oo][0-9OoIl|]{2})[-/.年]([0-9OoIl|]{1,2})[-/.月]([0-9OoIl|]{1,2})日?/)
     if (full) {
       const parsed = validDate(
         normalizeDateNumber(full[1].replace(/^Z/, '2')),
@@ -67,7 +67,7 @@ const extractExplicitDate = (text: string, now: Date) => {
   }
 
   for (const line of compactLines) {
-    const monthDay = line.match(/^(?:(?:日期|交易日期|交易时间|支付时间)[：:]?)?([0-9OoIl|]{1,2})(?:[-/.]|月)([0-9OoIl|]{1,2})[日号]?(?:(?:星期|周)[一二三四五六日天])?(?:\d{1,2}:\d{2})?$/)
+    const monthDay = line.match(/^(?:(?:日期|交易日期|交易时间|支付时间)[：:]?)?([0-9OoIl|]{1,2})(?:[-/.]|月|H)([0-9OoIl|]{1,2})[日号H]?(?:(?:星期|周)[一二三四五六日天])?(?:\d{1,2}:\d{2})?$/)
     if (!monthDay) continue
     const month = normalizeDateNumber(monthDay[1])
     const day = normalizeDateNumber(monthDay[2])
@@ -90,8 +90,11 @@ const extractDate = (text: string, now: Date) => {
   return toLocalDate(relativeDate)
 }
 
-const extractType = (text: string): TransactionType =>
-  /收入|收款|到账|工资|薪资|奖金|退款|返现|红包/.test(text) ? 'income' : 'expense'
+const extractType = (text: string): TransactionType => {
+  if (text.startsWith('支出金额')) return 'expense'
+  if (text.startsWith('收入金额')) return 'income'
+  return /收入|收款|到账|工资|薪资|奖金|退款|返现|红包/.test(text) ? 'income' : 'expense'
+}
 
 const extractAccount = (text: string, fallback: string) => {
   if (/零钱通/.test(text)) return '微信'
@@ -108,14 +111,15 @@ const cleanNote = (text: string) => {
   const labeled = text.match(/(?:商户名称|商户全称|交易对方|交易对象|收款方|商品说明|商品|付款给|转账给|向)[：:\s]*([^\n，,。]+)/)
   const lineCandidates = text.split('\n')
     .map((line) => line
-      .replace(/(?:付款金额|支付金额|实付金额|订单金额|交易金额|金额|支付时间|交易时间|创建时间|支付方式|付款方式|商户名称|商户全称|交易对方|交易对象|收款方|商品说明)[：:]?/g, ' ')
+      .replace(/(?:付款金额|支付金额|实付金额|订单金额|交易金额|收入金额|支出金额|金额|支付时间|交易时间|创建时间|支付方式|付款方式|商户名称|商户全称|交易对方|交易对象|收款方|商品说明)[：:]?/g, ' ')
       .replace(/(?:¥|￥|关|羊|Y)\s*[0-9OoIl|SB,]+(?:[.。][0-9OoIl|SB]{1,2})?\s*元?/gi, ' ')
       .replace(/(?:^|\s)[-−]?\s*\d[\d,]*(?:[.。]\d{1,2})?\s*元?(?=\s|$)/g, ' ')
       .replace(/(?:[2Z][0-9OoIl|]{3})[-/.年][0-9OoIl|]{1,2}[-/.月][0-9OoIl|]{1,2}(?:日)?(?:\s+\d{1,2}:\d{2}(?::\d{2})?)?/g, ' ')
-      .replace(/^\s*(?:(?:日期|交易日期|交易时间|支付时间)[：:]?\s*)?[0-9OoIl|]{1,2}\s*(?:[-/.]|月)\s*[0-9OoIl|]{1,2}\s*[日号]?(?:\s*(?:星期|周)[一二三四五六日天])?(?:\s*\d{1,2}:\d{2})?\s*$/g, ' ')
+      .replace(/[0-9OoIl|]{1,2}\s*(?:[-/.]|月|H)\s*[0-9OoIl|]{1,2}\s*[日号H]?\s+\d{1,2}:\d{2}(?::\d{2})?/g, ' ')
+      .replace(/^\s*(?:(?:日期|交易日期|交易时间|支付时间)[：:]?\s*)?[0-9OoIl|]{1,2}\s*(?:[-/.]|月|H)\s*[0-9OoIl|]{1,2}\s*[日号H]?(?:\s*(?:星期|周)[一二三四五六日天])?(?:\s*\d{1,2}:\d{2})?\s*$/g, ' ')
       .replace(/(?:今天|今日|今晚|今早|今晨|今夜|昨天|前天|上午|中午|下午|晚上|凌晨)|\b\d{1,2}:\d{2}(?::\d{2})?\b/g, ' ')
-      .replace(/支付成功|交易成功|付款成功|订单详情|账单详情|微信支付|支付宝/g, ' ')
-      .replace(/[：:，,。；;—|{}-]+/g, ' ')
+      .replace(/支付成功|交易成功|付款成功|订单详情|账单详情|微信支付|支付宝|全部账单|查找交易|收支统计|已全额退款/g, ' ')
+      .replace(/[+＋：:，,。；;—|{}-]+/g, ' ')
       .replace(/\[|\]/g, ' ')
       .replace(/\s+/g, ' ')
       .trim())
@@ -128,13 +132,14 @@ const cleanNote = (text: string) => {
   let note = labeled?.[1] ?? lineCandidates[0] ?? text
   note = note
     .replace(/20\d{2}[-/.年]\d{1,2}[-/.月]\d{1,2}(?:日)?(?:\s+\d{1,2}:\d{2}(?::\d{2})?)?/g, ' ')
-    .replace(/^\s*(?:(?:日期|交易日期|交易时间|支付时间)[：:]?\s*)?[0-9OoIl|]{1,2}\s*(?:[-/.]|月)\s*[0-9OoIl|]{1,2}\s*[日号]?(?:\s*(?:星期|周)[一二三四五六日天])?(?:\s*\d{1,2}:\d{2})?\s*$/g, ' ')
+    .replace(/[0-9OoIl|]{1,2}\s*(?:[-/.]|月|H)\s*[0-9OoIl|]{1,2}\s*[日号H]?\s+\d{1,2}:\d{2}(?::\d{2})?/g, ' ')
+    .replace(/^\s*(?:(?:日期|交易日期|交易时间|支付时间)[：:]?\s*)?[0-9OoIl|]{1,2}\s*(?:[-/.]|月|H)\s*[0-9OoIl|]{1,2}\s*[日号H]?(?:\s*(?:星期|周)[一二三四五六日天])?(?:\s*\d{1,2}:\d{2})?\s*$/g, ' ')
     .replace(/(?:今天|今日|今晚|今早|今晨|今夜|昨天|前天|刚刚|上午|中午|下午|晚上|凌晨)/g, ' ')
     .replace(/(?:付款金额|支付金额|实付金额|订单金额|交易金额|金额)[：:\s]*(?:¥|￥)?\s*\d+(?:\.\d{1,2})?/gi, ' ')
     .replace(/(?:¥|￥)?\s*\d+(?:\.\d{1,2})?\s*元?/g, ' ')
     .replace(/微信支付|微信|支付宝|花呗|零钱通|零钱|现金|银行卡|信用卡|储蓄卡/g, ' ')
-    .replace(/支付成功|交易成功|付款成功|已收钱|收款成功|付款|支付|消费|支出|收入|收款|到账|转账|给|用|通过/g, ' ')
-    .replace(/[：:，,。；;\-—|]+/g, ' ')
+    .replace(/支付成功|交易成功|付款成功|已收钱|收款成功|已全额退款|全部账单|查找交易|收支统计|付款|支付|消费|支出|收入|收款|到账|转账|给|用|通过/g, ' ')
+    .replace(/[+＋：:，,。；;\-—|]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
   return note.slice(0, 100)
@@ -167,14 +172,16 @@ export const parseQuickEntry = (raw: string, fallbackAccount = '微信', now = n
 const looseLineAmount = (line: string) => {
   const regular = extractAmount(line)
   if (regular) return regular
-  const match = line.match(/(?:^|\s)[-−]\s*([\d,]+\.\d{2})(?:\s|$)/)
+  const match = line.match(/(?:^|\s)[+＋−—-]\s*([\d,]+\.\d{2})(?:\s|$)/)
   return match ? Number(match[1].replace(/,/g, '')) : 0
 }
 
 const summaryTextPattern = /(?:当日|本日|今日|每日|本月|当月|每月|月度)\s*(?:总)?\s*(?:收入|支出)|总收入|总支出|收入合计|支出合计|收支合计|收入总计|支出总计|合计收入|合计支出|(?:收入|支出)\s*\d+\s*笔/
+const monthHeaderPattern = /(?:[2Z][0-9OoIl|]{3}\s*年\s*[0-9OoIl|]{1,2}\s*月|[2Z][0-9OoIl|]{3}\s*[-/.]\s*[0-9OoIl|]{1,2})(?=\s|[~～vV]|收入|支出|$)/
 
 const isSummaryAmount = (lines: string[], index: number) => {
   const adjacent = lines.slice(Math.max(0, index - 1), Math.min(lines.length, index + 2))
+  if (monthHeaderPattern.test(lines[index])) return true
   if (summaryTextPattern.test(adjacent.join(' '))) return true
   const immediateType = [lines[index - 1], lines[index + 1]].find((line) => /^(?:收入|支出)$/.test(line ?? ''))
   if (!immediateType) return false
@@ -207,7 +214,12 @@ export const parseQuickEntries = (raw: string, fallbackAccount = '微信', now =
 
     const previousIndex = amountLines[position - 1]?.index
     const nextIndex = amountLines[position + 1]?.index
-    const start = previousIndex === undefined ? Math.max(0, item.index - 4) : Math.floor((previousIndex + item.index) / 2) + 1
+    let sectionStart = 0
+    for (let index = 0; index <= item.index; index += 1) {
+      if (monthHeaderPattern.test(lines[index])) sectionStart = index
+    }
+    const rawStart = previousIndex === undefined ? Math.max(0, item.index - 4) : Math.floor((previousIndex + item.index) / 2) + 1
+    const start = Math.max(rawStart, sectionStart + 1)
     const end = nextIndex === undefined ? Math.min(lines.length, item.index + 5) : Math.floor((item.index + nextIndex) / 2) + 1
     let context = lines.slice(start, end).filter((line, offset) => {
       const absoluteIndex = start + offset
@@ -215,12 +227,19 @@ export const parseQuickEntries = (raw: string, fallbackAccount = '微信', now =
       return absoluteIndex === item.index || !amountLines.some((amountLine) => amountLine.index === absoluteIndex)
     }).join('\n')
     if (!extractExplicitDate(context, now)) {
-      const dateHeader = lines.slice(0, item.index + 1).reverse().find((line) => extractExplicitDate(line, now))
+      const nextHeaderOffset = lines.slice(item.index + 1).findIndex((line) => monthHeaderPattern.test(line))
+      const sectionEnd = nextHeaderOffset === -1 ? lines.length : item.index + 1 + nextHeaderOffset
+      const previousDate = lines.slice(sectionStart, item.index + 1).reverse().find((line) => extractExplicitDate(line, now))
+      const followingDate = lines.slice(item.index + 1, sectionEnd).find((line) => extractExplicitDate(line, now))
+      const dateHeader = previousDate ?? followingDate
       if (dateHeader) context = `${dateHeader}\n${context}`
     }
 
     try {
-      const result = parseQuickEntry(`金额 ¥${item.amount.toFixed(2)}\n${context}`, fallbackAccount, now)
+      const signedType = /(?:^|\s)[+＋]\s*(?:¥|￥|关|羊|Y)?\s*\d/.test(item.line) ? '收入'
+        : /(?:^|\s)[-−—]\s*(?:¥|￥|关|羊|Y)?\s*\d/.test(item.line) ? '支出' : ''
+      const amountLabel = signedType ? `${signedType}金额` : '金额'
+      const result = parseQuickEntry(`${amountLabel} ¥${item.amount.toFixed(2)}\n${context}`, fallbackAccount, now)
       results.push({ ...result, sourceIndex: item.index })
     } catch {
       // A single unreadable row should not prevent other rows from being offered.

@@ -1,4 +1,4 @@
-import type { Worker } from 'tesseract.js'
+import type { PSM, Worker } from 'tesseract.js'
 
 type OcrProgress = (percent: number, status: string) => void
 
@@ -37,6 +37,26 @@ const loadImage = (file: File) => new Promise<HTMLImageElement>((resolve, reject
   image.src = url
 })
 
+const invertDarkScreenshot = (canvas: HTMLCanvasElement) => {
+  const context = canvas.getContext('2d', { alpha: false, willReadFrequently: true })
+  if (!context) return
+  const image = context.getImageData(0, 0, canvas.width, canvas.height)
+  let sampledBrightness = 0
+  let samples = 0
+  const stride = Math.max(4, Math.floor(Math.sqrt((canvas.width * canvas.height) / 5000))) * 4
+  for (let index = 0; index < image.data.length; index += stride) {
+    sampledBrightness += image.data[index]
+    samples += 1
+  }
+  if (!samples || sampledBrightness / samples >= 115) return
+  for (let index = 0; index < image.data.length; index += 4) {
+    image.data[index] = 255 - image.data[index]
+    image.data[index + 1] = 255 - image.data[index + 1]
+    image.data[index + 2] = 255 - image.data[index + 2]
+  }
+  context.putImageData(image, 0, 0)
+}
+
 const prepareImage = async (file: File) => {
   const image = await loadImage(file)
   const preferredScale = image.naturalWidth < 1600
@@ -55,6 +75,7 @@ const prepareImage = async (file: File) => {
   context.imageSmoothingQuality = 'high'
   context.filter = 'grayscale(1) contrast(1.3)'
   context.drawImage(image, 0, 0, canvas.width, canvas.height)
+  invertDarkScreenshot(canvas)
   return canvas
 }
 
@@ -92,7 +113,8 @@ const convertToHighContrast = (canvas: HTMLCanvasElement) => {
     }
   }
 
-  threshold = Math.min(210, Math.max(125, threshold + 8))
+  const averageBrightness = weightedTotal / pixels
+  threshold = averageBrightness > 175 ? 215 : Math.min(210, Math.max(125, threshold + 8))
   for (let index = 0; index < image.data.length; index += 4) {
     const brightness = image.data[index]
     const value = brightness < threshold ? 0 : 255
@@ -127,8 +149,12 @@ const recognitionScore = (text: string, confidence: number) => {
   const keywords = text.match(/微信|支付宝|支付|付款|商户|订单|金额|时间|交易|收款/g)?.length ?? 0
   const hasAmount = /(?:¥|￥|\d)[\s\d,.]*\d/.test(text)
   const hasDate = /20\d{2}[-/.年]\d{1,2}/.test(text)
-  return confidence + Math.min(keywords, 6) * 4 + (hasAmount ? 4 : 0) + (hasDate ? 4 : 0)
+  const detailDates = text.match(/\d{1,2}\s*(?:月|H)\s*\d{1,2}\s*[日号H]/g)?.length ?? 0
+  return confidence + Math.min(keywords, 6) * 4 + (hasAmount ? 4 : 0) + (hasDate ? 4 : 0) + Math.min(detailDates, 6) * 6
 }
+
+const hasTransactionDate = (text: string) =>
+  /(?:[2Z][0Oo][0-9OoIl|]{2}[ \t]*[-/.年][ \t]*[0-9OoIl|]{1,2}[ \t]*[-/.月][ \t]*[0-9OoIl|]{1,2}[ \t]*[日号]?|[0-9OoIl|]{1,2}[ \t]*(?:月|H)[ \t]*[0-9OoIl|]{1,2}[ \t]*[日号H])/.test(text)
 
 const getWorker = () => {
   if (workerPromise) return workerPromise
@@ -177,11 +203,19 @@ const recognizePaymentImageNow = async (file: File, onProgress: OcrProgress) => 
     let { data } = await worker.recognize(image, { rotateAuto: true })
     const firstText = normalizeOcrText(data.text)
     const foundAmount = /(?:¥|￥|关|羊|Y)\s*[0-9OoIl|SB,]+|[-−]\s*\d+[.。]\d{2}|\d+[.。]\d{1,2}\s*元/.test(firstText)
-    if (data.confidence < 60 || !foundAmount) {
+    const foundDetailDate = hasTransactionDate(firstText)
+    if (data.confidence < 60 || !foundAmount || !foundDetailDate) {
       recognitionRound = 2
       convertToHighContrast(image)
-      const retry = await worker.recognize(image)
-      if (recognitionScore(retry.data.text, retry.data.confidence) > recognitionScore(data.text, data.confidence)) {
+      await worker.setParameters({ tessedit_pageseg_mode: '6' as PSM })
+      let retry
+      try {
+        retry = await worker.recognize(image)
+      } finally {
+        await worker.setParameters({ tessedit_pageseg_mode: '11' as PSM })
+      }
+      if (!foundDetailDate
+        || recognitionScore(retry.data.text, retry.data.confidence) > recognitionScore(data.text, data.confidence)) {
         data = retry.data
       }
     }
