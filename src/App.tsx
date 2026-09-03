@@ -323,7 +323,7 @@ function App() {
 
   const updateTransaction = async (id: string, input: TransactionInput): Promise<ActionResult> => {
     if (!supabase || !session) {
-      setTransactions((current) => current.map((item) => item.id === id ? { ...item, ...input } : item))
+      setTransactions((current) => current.map((item) => item.id === id ? { ...item, ...input, updated_at: new Date().toISOString() } : item))
       await persistCategory(input)
       await persistAccount(input)
       return { ok: true }

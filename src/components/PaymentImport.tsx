@@ -14,6 +14,7 @@ import {
   X,
 } from 'lucide-react'
 import { readPaymentStatement, transactionFingerprint, ZipPasswordRequiredError, type ParsedPaymentRow } from '../lib/paymentImport'
+import { applyRememberedCategory, buildMerchantCategoryMemory } from '../lib/merchantCategory'
 import type { ActionResult, Transaction, TransactionInput } from '../types'
 
 interface PaymentImportProps {
@@ -32,6 +33,7 @@ export function PaymentImport({ transactions, onClose, onImport }: PaymentImport
   const [rows, setRows] = useState<ParsedPaymentRow[]>([])
   const [skipped, setSkipped] = useState(0)
   const [duplicates, setDuplicates] = useState(0)
+  const [remembered, setRemembered] = useState(0)
   const [error, setError] = useState('')
   const [importing, setImporting] = useState(false)
   const [importProgress, setImportProgress] = useState(0)
@@ -41,15 +43,18 @@ export function PaymentImport({ transactions, onClose, onImport }: PaymentImport
     () => new Set(transactions.map(transactionFingerprint)),
     [transactions],
   )
+  const merchantCategoryMemory = useMemo(() => buildMerchantCategoryMemory(transactions), [transactions])
 
   const loadFile = async (file: File, password?: string) => {
     setError('')
     setImported(null)
     try {
       const result = await readPaymentStatement(file, password)
+      const rememberedRows = result.rows.map((row) => applyRememberedCategory(row, merchantCategoryMemory))
+      setRemembered(rememberedRows.filter((row, index) => row.category !== result.rows[index].category).length)
       const seen = new Set(existing)
       let duplicateCount = 0
-      const uniqueRows = result.rows.filter((row) => {
+      const uniqueRows = rememberedRows.filter((row) => {
         const fingerprint = transactionFingerprint(row)
         if (seen.has(fingerprint)) {
           duplicateCount += 1
@@ -67,6 +72,7 @@ export function PaymentImport({ transactions, onClose, onImport }: PaymentImport
       setRows([])
       setSkipped(0)
       setDuplicates(0)
+      setRemembered(0)
       if (reason instanceof ZipPasswordRequiredError) {
         setNeedsPassword(true)
       } else {
@@ -215,6 +221,7 @@ export function PaymentImport({ transactions, onClose, onImport }: PaymentImport
                 <span><b>{skipped}</b> 行已忽略</span>
               </div>
             )}
+            {remembered > 0 && <p className="import-memory-note">已根据你的历史账目自动归类 {remembered} 笔，导入前仍可查看预览。</p>}
 
             {rows.length > 0 && (
               <div className="import-preview">

@@ -2,6 +2,7 @@ import { useMemo, useState, type ChangeEvent, type FormEvent } from 'react'
 import { AlertTriangle, ClipboardPaste, ImagePlus, ListChecks, ShieldCheck, Sparkles, Trash2, X } from 'lucide-react'
 import { defaultAccounts, expenseCategories, incomeCategories } from '../data'
 import { toLocalDate } from '../lib/date'
+import { applyRememberedCategory, buildMerchantCategoryMemory } from '../lib/merchantCategory'
 import { transactionFingerprint } from '../lib/paymentImport'
 import { parseQuickEntries, parseQuickEntry } from '../lib/quickEntry'
 import { recognizePaymentImage } from '../lib/imageOcr'
@@ -43,6 +44,7 @@ export function TransactionForm({ initial, transactions, knownCategories, knownA
   const [keepDuplicates, setKeepDuplicates] = useState<boolean[]>([])
   const [batchResult, setBatchResult] = useState<{ saved: number; skipped: number; failed: number } | null>(null)
   const [batchSaving, setBatchSaving] = useState(false)
+  const merchantCategoryMemory = useMemo(() => buildMerchantCategoryMemory(transactions), [transactions])
   const reviewIssueCount = ocrWarnings.filter((warnings) => warnings.length > 0).length
   const duplicateFlags = useMemo(() => {
     const seen = new Set(transactions.map(transactionFingerprint))
@@ -69,6 +71,11 @@ export function TransactionForm({ initial, transactions, knownCategories, knownA
     ...(knownAccounts ?? []),
     ...(initial?.account ? [initial.account] : []),
   ])]
+  const categoriesForType = (nextType: TransactionType, currentCategory: string) => [...new Set([
+    ...(nextType === 'expense' ? expenseCategories : incomeCategories),
+    ...(knownCategories?.[nextType] ?? []),
+    currentCategory,
+  ])]
 
   const changeType = (nextType: TransactionType) => {
     setType(nextType)
@@ -87,13 +94,15 @@ export function TransactionForm({ initial, transactions, knownCategories, knownA
     setBatchResult(null)
     try {
       const result = parseQuickEntry(text, account, new Date())
-      setType(result.input.type)
-      setAmount(String(result.input.amount))
-      setCategory(result.input.category)
-      setAccount(result.input.account)
-      setNote(result.input.note)
-      setDate(result.input.occurred_on)
-      setSmartMessage(`已识别：${result.recognized.join(' · ')}。请检查后保存。`)
+      const input = applyRememberedCategory(result.input, merchantCategoryMemory)
+      const remembered = input.category !== result.input.category
+      setType(input.type)
+      setAmount(String(input.amount))
+      setCategory(input.category)
+      setAccount(input.account)
+      setNote(input.note)
+      setDate(input.occurred_on)
+      setSmartMessage(`已识别：${result.recognized.join(' · ')}。${remembered ? `已按历史记录归类为“${input.category}”。` : '请检查后保存。'}`)
     } catch (reason) {
       setSmartError(reason instanceof Error ? reason.message : '识别失败，请调整文字后重试。')
     }
@@ -144,14 +153,19 @@ export function TransactionForm({ initial, transactions, knownCategories, knownA
         setOcrStatus(status)
       })
       setSmartText(text)
-      const results = parseQuickEntries(text, account, new Date())
+      const parsedResults = parseQuickEntries(text, account, new Date())
+      const rememberedCount = parsedResults.filter((result) => applyRememberedCategory(result.input, merchantCategoryMemory).category !== result.input.category).length
+      const results = parsedResults.map((result) => ({
+        ...result,
+        input: applyRememberedCategory(result.input, merchantCategoryMemory),
+      }))
       if (results.length > 1) {
         setOcrCandidates(results.map((result) => result.input))
         setOcrWarnings(results.map((result) => result.warnings))
         setOcrReviewed(false)
         setIncludeCandidates(results.map(() => true))
         setKeepDuplicates(results.map(() => false))
-        setSmartMessage(`从截图中识别到 ${results.length} 笔账目，请逐笔检查后批量保存。`)
+        setSmartMessage(`从截图中识别到 ${results.length} 笔账目${rememberedCount ? `，${rememberedCount} 笔已使用历史分类` : ''}，请逐笔检查后批量保存。`)
       } else if (results.length === 1) {
         const result = results[0]
         const duplicate = transactions.some((item) => transactionFingerprint(item) === transactionFingerprint(result.input))
@@ -374,6 +388,11 @@ export function TransactionForm({ initial, transactions, knownCategories, knownA
                           <label>金额<input type="number" min="0.01" step="0.01" value={item.amount} onChange={(event) => updateOcrCandidate(index, { amount: Number(event.target.value) })} /></label>
                           <label>日期<input type="date" value={item.occurred_on} onChange={(event) => updateOcrCandidate(index, { occurred_on: event.target.value })} /></label>
                         </div>
+                        <label>分类
+                          <select value={item.category} onChange={(event) => updateOcrCandidate(index, { category: event.target.value })}>
+                            {categoriesForType(item.type, item.category).map((itemCategory) => <option key={itemCategory}>{itemCategory}</option>)}
+                          </select>
+                        </label>
                         <label>商户或事项<input value={item.note} maxLength={100} onChange={(event) => updateOcrCandidate(index, { note: event.target.value })} /></label>
                         {duplicateFlags[index] && (
                           <label className="ocr-duplicate-choice">
