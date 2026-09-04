@@ -5,6 +5,7 @@ import {
   Bell,
   BookOpen,
   BriefcaseBusiness,
+  CalendarDays,
   Car,
   AlertTriangle,
   CheckCircle2,
@@ -40,6 +41,7 @@ import { escapeCsv } from '../lib/csv'
 import { toLocalMonth } from '../lib/date'
 import type { ActionResult, Budget, SavedAccount, SavedCategory, Transaction, TransactionInput, TransactionType } from '../types'
 import { BudgetForm } from './BudgetForm'
+import { ExpenseCalendar } from './ExpenseCalendar'
 import { PaymentImport } from './PaymentImport'
 import { TransactionForm } from './TransactionForm'
 
@@ -113,6 +115,7 @@ export function Dashboard({
   const [typeFilter, setTypeFilter] = useState<'all' | TransactionType>('all')
   const [categoryFilter, setCategoryFilter] = useState('all')
   const [accountFilter, setAccountFilter] = useState('all')
+  const [dayFilter, setDayFilter] = useState<string | null>(null)
   const [operationError, setOperationError] = useState('')
   const [operationSuccess, setOperationSuccess] = useState('')
 
@@ -127,9 +130,10 @@ export function Dashboard({
       if (typeFilter !== 'all' && item.type !== typeFilter) return false
       if (categoryFilter !== 'all' && item.category !== categoryFilter) return false
       if (accountFilter !== 'all' && item.account !== accountFilter) return false
+      if (dayFilter && item.occurred_on !== dayFilter) return false
       return !normalized || `${item.category} ${item.account} ${item.note}`.toLowerCase().includes(normalized)
     })
-  }, [accountFilter, categoryFilter, monthTransactions, query, typeFilter])
+  }, [accountFilter, categoryFilter, dayFilter, monthTransactions, query, typeFilter])
 
   const availableCategories = useMemo(
     () => [...new Set(monthTransactions.map((item) => item.category))].sort((a, b) => a.localeCompare(b, 'zh-CN')),
@@ -212,12 +216,15 @@ export function Dashboard({
     setTypeFilter('all')
     setCategoryFilter('all')
     setAccountFilter('all')
+    setDayFilter(null)
   }
 
   const changeMonth = (nextMonth: string) => {
+    if (!nextMonth) return
     setMonth(nextMonth)
     setCategoryFilter('all')
     setAccountFilter('all')
+    setDayFilter(null)
   }
 
   const showTypeDetails = (type: TransactionType) => {
@@ -225,6 +232,17 @@ export function Dashboard({
     setQuery('')
     setCategoryFilter('all')
     setAccountFilter('all')
+    setDayFilter(null)
+    window.history.replaceState(null, '', '#records')
+    window.requestAnimationFrame(() => document.getElementById('records')?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
+  }
+
+  const showDayExpenses = (date: string) => {
+    setTypeFilter('expense')
+    setQuery('')
+    setCategoryFilter('all')
+    setAccountFilter('all')
+    setDayFilter(date)
     window.history.replaceState(null, '', '#records')
     window.requestAnimationFrame(() => document.getElementById('records')?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
   }
@@ -235,12 +253,13 @@ export function Dashboard({
     setQuery('')
     setCategoryFilter('all')
     setAccountFilter('all')
+    setDayFilter(null)
     setOperationSuccess(`已保存到 ${input.occurred_on} 的${input.type === 'income' ? '收入' : '支出'}明细中。`)
     window.setTimeout(() => setOperationSuccess(''), 4000)
     window.requestAnimationFrame(() => document.getElementById('records')?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
   }
 
-  const hasFilters = Boolean(query.trim()) || typeFilter !== 'all' || categoryFilter !== 'all' || accountFilter !== 'all'
+  const hasFilters = Boolean(query.trim()) || typeFilter !== 'all' || categoryFilter !== 'all' || accountFilter !== 'all' || Boolean(dayFilter)
 
   const displayMonth = new Intl.DateTimeFormat('zh-CN', {
     year: 'numeric',
@@ -260,6 +279,7 @@ export function Dashboard({
         <nav>
           <a className="active" href="#overview"><LayoutDashboard size={19} />总览</a>
           <a href="#records"><ReceiptText size={19} />收支明细</a>
+          <a href="#calendar"><CalendarDays size={19} />支出日历</a>
           <a href="#budget"><WalletCards size={19} />预算</a>
           <a href="#insight"><BookOpen size={19} />消费洞察</a>
         </nav>
@@ -358,6 +378,14 @@ export function Dashboard({
           </article>
         </section>
 
+        <ExpenseCalendar
+          month={month}
+          transactions={monthTransactions}
+          selectedDate={dayFilter}
+          formatMoney={(value) => money.format(value)}
+          onSelectDate={showDayExpenses}
+        />
+
         <section className="panel records-panel" id="records">
           <header className="panel-header records-header">
             <div><p className="eyebrow">逐笔回顾</p><h2>本月明细</h2></div>
@@ -379,6 +407,7 @@ export function Dashboard({
               {availableAccounts.map((item) => <option key={item} value={item}>{item}</option>)}
             </select>
             <span className="filter-result">显示 {visibleTransactions.length} / {monthTransactions.length} 笔</span>
+            {dayFilter && <span className="day-filter-chip">{Number(dayFilter.slice(5, 7))}月{Number(dayFilter.slice(8, 10))}日</span>}
             {hasFilters && <button className="clear-filters" type="button" onClick={resetFilters}>清除筛选</button>}
           </div>
           {loading ? <p className="loading-text">正在读取账目…</p> : visibleTransactions.length ? (
