@@ -36,6 +36,23 @@ const normalizeDateNumber = (value: string) => Number(value
   .replace(/[Oo〇]/g, '0')
   .replace(/[Il|]/g, '1'))
 
+const chineseDateDigits: Record<string, number> = {
+  零: 0, 〇: 0, 一: 1, 二: 2, 两: 2, 三: 3, 四: 4,
+  五: 5, 六: 6, 七: 7, 八: 8, 九: 9,
+}
+
+const parseDatePart = (value: string) => {
+  if (!/[零〇一二两三四五六七八九十]/.test(value)) return normalizeDateNumber(value)
+  if (value === '十') return 10
+  const parts = value.split('十')
+  if (parts.length === 2) {
+    const tens = parts[0] ? chineseDateDigits[parts[0]] : 1
+    const ones = parts[1] ? chineseDateDigits[parts[1]] : 0
+    return tens * 10 + ones
+  }
+  return Number([...value].map((character) => chineseDateDigits[character]).join(''))
+}
+
 const validDate = (year: number, month: number, day: number) => {
   const date = new Date(year, month - 1, day)
   if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) return null
@@ -43,17 +60,6 @@ const validDate = (year: number, month: number, day: number) => {
 }
 
 const extractExplicitDate = (text: string, now: Date) => {
-  const relativeDate = new Date(now)
-  if (/(?:今天|今日|今晚|今早|今晨|今夜)/.test(text)) return toLocalDate(relativeDate)
-  if (text.includes('前天')) {
-    relativeDate.setDate(relativeDate.getDate() - 2)
-    return toLocalDate(relativeDate)
-  }
-  if (text.includes('昨天')) {
-    relativeDate.setDate(relativeDate.getDate() - 1)
-    return toLocalDate(relativeDate)
-  }
-
   const compactLines = text.split('\n').map((line) => line.replace(/\s+/g, ''))
   for (const line of compactLines) {
     const full = line.match(/([2Z][0Oo][0-9OoIl|]{2})[-/.年]([0-9OoIl|]{1,2})[-/.月]([0-9OoIl|]{1,2})日?/)
@@ -68,10 +74,11 @@ const extractExplicitDate = (text: string, now: Date) => {
   }
 
   for (const line of compactLines) {
-    const monthDay = line.match(/^(?:(?:日期|交易日期|交易时间|支付时间)[：:]?)?([0-9OoIl|]{1,2})(?:[-/.]|月|H)([0-9OoIl|]{1,2})[日号H]?(?:(?:星期|周)[一二三四五六日天])?(?:\d{1,2}:\d{2})?$/)
+    const monthDay = line.match(/([0-9OoIl|零〇一二两三四五六七八九十]{1,3})(?:月|H)([0-9OoIl|零〇一二两三四五六七八九十]{1,3})[日号H]?/)
+      ?? line.match(/^(?:(?:日期|交易日期|交易时间|支付时间)[：:]?)?([0-9OoIl|]{1,2})[-/.]([0-9OoIl|]{1,2})(?:[日号])?(?:\d{1,2}:\d{2})?$/)
     if (!monthDay) continue
-    const month = normalizeDateNumber(monthDay[1])
-    const day = normalizeDateNumber(monthDay[2])
+    const month = parseDatePart(monthDay[1])
+    const day = parseDatePart(monthDay[2])
     const parsed = validDate(now.getFullYear(), month, day)
     if (!parsed) continue
     const candidate = new Date(now.getFullYear(), month - 1, day)
@@ -80,6 +87,17 @@ const extractExplicitDate = (text: string, now: Date) => {
     if (candidate > futureLimit) return validDate(now.getFullYear() - 1, month, day)
     return parsed
   }
+
+  const relativeDate = new Date(now)
+  if (text.includes('前天')) {
+    relativeDate.setDate(relativeDate.getDate() - 2)
+    return toLocalDate(relativeDate)
+  }
+  if (text.includes('昨天')) {
+    relativeDate.setDate(relativeDate.getDate() - 1)
+    return toLocalDate(relativeDate)
+  }
+  if (/(?:今天|今日|今晚|今早|今晨|今夜)/.test(text)) return toLocalDate(relativeDate)
 
   return null
 }
@@ -116,7 +134,8 @@ const cleanNote = (text: string) => {
       .replace(/(?:¥|￥|关|羊|Y)\s*[0-9OoIl|SB,]+(?:[.。][0-9OoIl|SB]{1,2})?\s*元?/gi, ' ')
       .replace(/(?:^|\s)[-−]?\s*\d[\d,]*(?:[.。]\d{1,2})?\s*元?(?=\s|$)/g, ' ')
       .replace(/(?:[2Z][0-9OoIl|]{3})[-/.年][0-9OoIl|]{1,2}[-/.月][0-9OoIl|]{1,2}(?:日)?(?:\s+\d{1,2}:\d{2}(?::\d{2})?)?/g, ' ')
-      .replace(/[0-9OoIl|]{1,2}\s*(?:[-/.]|月|H)\s*[0-9OoIl|]{1,2}\s*[日号H]?\s+\d{1,2}:\d{2}(?::\d{2})?/g, ' ')
+      .replace(/[0-9OoIl|零〇一二两三四五六七八九十]{1,3}\s*(?:[-/.]|月|H)\s*[0-9OoIl|零〇一二两三四五六七八九十]{1,3}\s*[日号H]?\s*\d{1,2}:\d{2}(?::\d{2})?/g, ' ')
+      .replace(/[零〇一二两三四五六七八九十]{1,3}月[零〇一二两三四五六七八九十]{1,3}[日号]/g, ' ')
       .replace(/^\s*(?:(?:日期|交易日期|交易时间|支付时间)[：:]?\s*)?[0-9OoIl|]{1,2}\s*(?:[-/.]|月|H)\s*[0-9OoIl|]{1,2}\s*[日号H]?(?:\s*(?:星期|周)[一二三四五六日天])?(?:\s*\d{1,2}:\d{2})?\s*$/g, ' ')
       .replace(/(?:今天|今日|今晚|今早|今晨|今夜|昨天|前天|上午|中午|下午|晚上|凌晨)|\b\d{1,2}:\d{2}(?::\d{2})?\b/g, ' ')
       .replace(/支付成功|交易成功|付款成功|订单详情|账单详情|微信支付|支付宝|全部账单|查找交易|收支统计|已全额退款/g, ' ')
@@ -133,7 +152,8 @@ const cleanNote = (text: string) => {
   let note = labeled?.[1] ?? lineCandidates[0] ?? text
   note = note
     .replace(/20\d{2}[-/.年]\d{1,2}[-/.月]\d{1,2}(?:日)?(?:\s+\d{1,2}:\d{2}(?::\d{2})?)?/g, ' ')
-    .replace(/[0-9OoIl|]{1,2}\s*(?:[-/.]|月|H)\s*[0-9OoIl|]{1,2}\s*[日号H]?\s+\d{1,2}:\d{2}(?::\d{2})?/g, ' ')
+    .replace(/[0-9OoIl|零〇一二两三四五六七八九十]{1,3}\s*(?:[-/.]|月|H)\s*[0-9OoIl|零〇一二两三四五六七八九十]{1,3}\s*[日号H]?\s*\d{1,2}:\d{2}(?::\d{2})?/g, ' ')
+    .replace(/[零〇一二两三四五六七八九十]{1,3}月[零〇一二两三四五六七八九十]{1,3}[日号]/g, ' ')
     .replace(/^\s*(?:(?:日期|交易日期|交易时间|支付时间)[：:]?\s*)?[0-9OoIl|]{1,2}\s*(?:[-/.]|月|H)\s*[0-9OoIl|]{1,2}\s*[日号H]?(?:\s*(?:星期|周)[一二三四五六日天])?(?:\s*\d{1,2}:\d{2})?\s*$/g, ' ')
     .replace(/(?:今天|今日|今晚|今早|今晨|今夜|昨天|前天|刚刚|上午|中午|下午|晚上|凌晨)/g, ' ')
     .replace(/(?:付款金额|支付金额|实付金额|订单金额|交易金额|金额)[：:\s]*(?:¥|￥)?\s*\d+(?:\.\d{1,2})?/gi, ' ')
@@ -223,21 +243,28 @@ export const parseQuickEntries = (raw: string, fallbackAccount = '微信', now =
     const rawStart = previousIndex === undefined ? Math.max(0, item.index - 4) : Math.floor((previousIndex + item.index) / 2) + 1
     const start = Math.max(rawStart, sectionStart + 1)
     const end = nextIndex === undefined ? Math.min(lines.length, item.index + 5) : Math.floor((item.index + nextIndex) / 2) + 1
+    const nextHeaderOffset = lines.slice(item.index + 1).findIndex((line) => monthHeaderPattern.test(line))
+    const sectionEnd = nextHeaderOffset === -1 ? lines.length : item.index + 1 + nextHeaderOffset
+    const nearestDate = lines
+      .map((line, index) => ({ line, index, date: extractExplicitDate(line, now) }))
+      .filter((candidate) => candidate.date
+        && candidate.index > sectionStart
+        && candidate.index < sectionEnd
+        && Math.abs(candidate.index - item.index) <= 4)
+      .sort((left, right) => {
+        const distance = Math.abs(left.index - item.index) - Math.abs(right.index - item.index)
+        if (distance !== 0) return distance
+        return right.index - left.index
+      })[0]
     let context = lines.slice(start, end).filter((line, offset) => {
       const absoluteIndex = start + offset
       if (summaryAmountIndexes.has(absoluteIndex) || summaryTextPattern.test(line)) return false
+      if (nearestDate && absoluteIndex !== nearestDate.index && extractExplicitDate(line, now)) return false
       return absoluteIndex === item.index || !amountLines.some((amountLine) => amountLine.index === absoluteIndex)
     }).join('\n')
     let dateWasInferred = false
-    if (!extractExplicitDate(context, now)) {
-      const nextHeaderOffset = lines.slice(item.index + 1).findIndex((line) => monthHeaderPattern.test(line))
-      const sectionEnd = nextHeaderOffset === -1 ? lines.length : item.index + 1 + nextHeaderOffset
-      const previousDate = lines.slice(sectionStart, item.index + 1).reverse().find((line) => extractExplicitDate(line, now))
-      const followingDate = lines.slice(item.index + 1, sectionEnd).find((line) => extractExplicitDate(line, now))
-      const dateHeader = previousDate ?? followingDate
-      if (dateHeader) context = `${dateHeader}\n${context}`
-      else dateWasInferred = true
-    }
+    if (nearestDate) context = `${nearestDate.line}\n${context}`
+    else if (!extractExplicitDate(context, now)) dateWasInferred = true
 
     try {
       const signedType = /(?:^|\s)[+＋]\s*(?:¥|￥|关|羊|Y)?\s*\d/.test(item.line) ? '收入'
