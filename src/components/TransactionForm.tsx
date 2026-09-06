@@ -328,7 +328,7 @@ export function TransactionForm({ initial, transactions, knownCategories, knownA
               <textarea
                 value={smartText}
                 onChange={(event) => setSmartText(event.target.value)}
-                placeholder="例如：今天午饭35元，微信支付"
+                placeholder="例如：昨天晚饭三十五块五，微信付的"
                 rows={3}
               />
               <div className="smart-entry-actions">

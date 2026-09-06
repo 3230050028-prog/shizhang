@@ -8,10 +8,66 @@ export interface QuickEntryResult {
   warnings: string[]
 }
 
+const chineseNumberDigits: Record<string, number> = {
+  零: 0, 〇: 0, 一: 1, 二: 2, 两: 2, 三: 3, 四: 4,
+  五: 5, 六: 6, 七: 7, 八: 8, 九: 9,
+}
+
+const parseChineseNumber = (value: string) => {
+  const [integerText, decimalText = ''] = value.split('点')
+  let total = 0
+  let section = 0
+  let number = 0
+  for (const character of integerText) {
+    if (character in chineseNumberDigits) {
+      number = chineseNumberDigits[character]
+      continue
+    }
+    const unit = character === '十' ? 10 : character === '百' ? 100 : character === '千' ? 1000 : 10000
+    if (unit === 10000) {
+      total += (section + number) * unit
+      section = 0
+    } else {
+      section += (number || 1) * unit
+    }
+    number = 0
+  }
+  const integer = total + section + number
+  const decimal = decimalText
+    ? Number(`0.${[...decimalText].map((character) => chineseNumberDigits[character]).join('')}`)
+    : 0
+  return integer + decimal
+}
+
+const spokenNumberValue = (value: string) => /^\d/.test(value) ? Number(value) : parseChineseNumber(value)
+
+const spokenDigitValue = (value: string) => Number([...value]
+  .map((character) => character in chineseNumberDigits ? chineseNumberDigits[character] : character)
+  .join(''))
+
+const normalizeSpokenText = (raw: string) => {
+  const numberToken = '(?:\\d+(?:\\.\\d+)?|[零〇一二两三四五六七八九十百千万点]+)'
+  const digitToken = '[0-9零〇一二两三四五六七八九]'
+  let text = raw.normalize('NFKC')
+    .replace(/威信(?=支付|付款|付的|零钱|[，,。\s]|$)/g, '微信')
+    .replace(/支(?:富宝|付保)/g, '支付宝')
+
+  const moneyPattern = new RegExp(`(${numberToken})(?:元|块钱?|块)(?:(?:(${digitToken})(?:角|毛)(?:(${digitToken})分)?)|(?:(${digitToken}{1,2})分)|(?:(${digitToken})(?=[，,。\\s]|$)))?`, 'g')
+  text = text.replace(moneyPattern, (_match, baseText: string, jiaoText?: string, fenText?: string, fenOnlyText?: string, shorthandText?: string) => {
+    const base = spokenNumberValue(baseText)
+    const jiao = jiaoText ? spokenDigitValue(jiaoText) / 10 : shorthandText ? spokenDigitValue(shorthandText) / 10 : 0
+    const fen = fenText ? spokenDigitValue(fenText) / 100 : fenOnlyText ? spokenDigitValue(fenOnlyText) / 100 : 0
+    return `${Number((base + jiao + fen).toFixed(2))}元`
+  })
+
+  const labeledNumber = new RegExp(`(花了|花费|付了|支付了|用了|买了|消费|支出|收入|收款|收到|到账|入账|进账|工资|薪资|奖金|退款|返现|赚了)[：:\\s]*([零〇一二两三四五六七八九十百千万点]+)(?=[，,。\\s]|$)`, 'g')
+  return text.replace(labeledNumber, (_match, label: string, value: string) => `${label}${parseChineseNumber(value)}元`)
+}
+
 const extractAmount = (text: string) => {
   const amountCharacters = '[0-9OoIl|SB,]+'
   const patterns = [
-    new RegExp(`(?:付款金额|支付金额|实付金额|订单金额|交易金额|金额|消费|支出|收入|收款|到账)[：:\\s]*(?:-|−)?\\s*(?:¥|￥|关|羊|Y)?\\s*(${amountCharacters}(?:[.。]${amountCharacters})?)`, 'i'),
+    new RegExp(`(?:付款金额|支付金额|实付金额|订单金额|交易金额|金额|消费|支出|收入|收款|收到|到账|入账|进账|花了|花费|付了|支付了|用了|买了|赚了)[：:\\s]*(?:-|−)?\\s*(?:¥|￥|关|羊|Y)?\\s*(${amountCharacters}(?:[.。]${amountCharacters})?)`, 'i'),
     new RegExp(`(?:-|−)?\\s*(?:¥|￥|关|羊|Y)\\s*(${amountCharacters}(?:[.。]${amountCharacters})?)`, 'i'),
     new RegExp(`(${amountCharacters}(?:[.。]${amountCharacters})?)\\s*元`, 'i'),
   ]
@@ -112,7 +168,7 @@ const extractDate = (text: string, now: Date) => {
 const extractType = (text: string): TransactionType => {
   if (text.startsWith('支出金额')) return 'expense'
   if (text.startsWith('收入金额')) return 'income'
-  return /收入|收款|到账|工资|薪资|奖金|退款|返现|红包/.test(text) ? 'income' : 'expense'
+  return /收入|收款|收到|到账|入账|进账|工资|薪资|奖金|退款|返现|红包|赚了/.test(text) ? 'income' : 'expense'
 }
 
 const extractAccount = (text: string, fallback: string) => {
@@ -159,6 +215,7 @@ const cleanNote = (text: string) => {
     .replace(/(?:付款金额|支付金额|实付金额|订单金额|交易金额|金额)[：:\s]*(?:¥|￥)?\s*\d+(?:\.\d{1,2})?/gi, ' ')
     .replace(/(?:¥|￥)?\s*\d+(?:\.\d{1,2})?\s*元?/g, ' ')
     .replace(/微信支付|微信|支付宝|花呗|零钱通|零钱|现金|银行卡|信用卡|储蓄卡/g, ' ')
+    .replace(/帮我记一笔|帮我记账|记一笔|记一下|花了|花费|付了|支付了|用了|买了|赚了|付的|收到/g, ' ')
     .replace(/支付成功|交易成功|付款成功|已收钱|收款成功|已全额退款|全部账单|查找交易|收支统计|付款|支付|消费|支出|收入|收款|到账|转账|给|用|通过/g, ' ')
     .replace(/[+＋：:，,。；;\-—|]+/g, ' ')
     .replace(/\s+/g, ' ')
@@ -167,7 +224,7 @@ const cleanNote = (text: string) => {
 }
 
 export const parseQuickEntry = (raw: string, fallbackAccount = '微信', now = new Date()): QuickEntryResult => {
-  const text = raw.trim().replace(/(?<=[\u3400-\u9fff])[ \t]+(?=[\u3400-\u9fff])/g, '')
+  const text = normalizeSpokenText(raw.trim()).replace(/(?<=[\u3400-\u9fff])[ \t]+(?=[\u3400-\u9fff])/g, '')
   if (!text) throw new Error('请粘贴支付通知，或输入一句记账内容。')
   const amount = extractAmount(text)
   if (!amount || !Number.isFinite(amount)) throw new Error('没有识别到金额，请尝试写成“午饭35元，微信支付”。')
