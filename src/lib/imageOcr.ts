@@ -115,9 +115,11 @@ const convertToHighContrast = (canvas: HTMLCanvasElement) => {
 
   const averageBrightness = weightedTotal / pixels
   threshold = averageBrightness > 175 ? 215 : Math.min(210, Math.max(125, threshold + 8))
+  const blackPoint = Math.max(30, threshold - 70)
+  const whitePoint = Math.min(252, threshold + 35)
   for (let index = 0; index < image.data.length; index += 4) {
     const brightness = image.data[index]
-    const value = brightness < threshold ? 0 : 255
+    const value = Math.max(0, Math.min(255, Math.round((brightness - blackPoint) * 255 / (whitePoint - blackPoint))))
     image.data[index] = value
     image.data[index + 1] = value
     image.data[index + 2] = value
@@ -155,6 +157,9 @@ const recognitionScore = (text: string, confidence: number) => {
 
 const hasTransactionDate = (text: string) =>
   /(?:[2Z][0Oo][0-9OoIl|]{2}[ \t]*[-/.年][ \t]*[0-9OoIl|]{1,2}[ \t]*[-/.月][ \t]*[0-9OoIl|]{1,2}[ \t]*[日号]?|[0-9OoIl|]{1,2}[ \t]*(?:月|H)[ \t]*[0-9OoIl|]{1,2}[ \t]*[日号H])/.test(text)
+
+const recognizedAmountCount = (text: string) =>
+  text.match(/(?:¥|￥|关|羊|Y)\s*[0-9OoIl|SB,]+(?:[.。][0-9OoIl|SB]{1,2})?|[+＋−—-]\s*\d+[.。]\d{2}|\d+[.。]\d{1,2}\s*元/g)?.length ?? 0
 
 const getWorker = () => {
   if (workerPromise) return workerPromise
@@ -207,15 +212,22 @@ const recognizePaymentImageNow = async (file: File, onProgress: OcrProgress) => 
     if (data.confidence < 60 || !foundAmount || !foundDetailDate) {
       recognitionRound = 2
       convertToHighContrast(image)
-      await worker.setParameters({ tessedit_pageseg_mode: '6' as PSM })
+      await worker.setParameters({ tessedit_pageseg_mode: '11' as PSM })
       let retry
       try {
         retry = await worker.recognize(image)
       } finally {
         await worker.setParameters({ tessedit_pageseg_mode: '11' as PSM })
       }
-      if (!foundDetailDate
-        || recognitionScore(retry.data.text, retry.data.confidence) > recognitionScore(data.text, data.confidence)) {
+      const retryText = normalizeOcrText(retry.data.text)
+      const firstAmountCount = recognizedAmountCount(firstText)
+      const retryAmountCount = recognizedAmountCount(retryText)
+      const keepsMostDetails = retryAmountCount >= Math.max(1, Math.ceil(firstAmountCount * 0.65))
+      const retryAddsDates = !foundDetailDate && hasTransactionDate(retryText) && keepsMostDetails
+      const retryImprovesOverall = recognitionScore(retryText, retry.data.confidence) > recognitionScore(firstText, data.confidence) + 2
+        && (firstAmountCount === 0 || keepsMostDetails)
+      if (retryAddsDates
+        || retryImprovesOverall) {
         data = retry.data
       }
     }

@@ -61,7 +61,14 @@ const normalizeSpokenText = (raw: string) => {
   })
 
   const labeledNumber = new RegExp(`(花了|花费|付了|支付了|用了|买了|消费|支出|收入|收款|收到|到账|入账|进账|工资|薪资|奖金|退款|返现|赚了)[：:\\s]*([零〇一二两三四五六七八九十百千万点]+)(?=[，,。\\s]|$)`, 'g')
-  return text.replace(labeledNumber, (_match, label: string, value: string) => `${label}${parseChineseNumber(value)}元`)
+  text = text.replace(labeledNumber, (_match, label: string, value: string) => `${label}${parseChineseNumber(value)}元`)
+
+  const bareAmountPattern = new RegExp(`(${numberToken})(\\s*(?:(?:微信|支付宝|现金|银行卡)(?:支付|付的|付)?|付的)?[。！？!?]?)$`)
+  return text.split(/([，,；;、+＋])/).map((clause, index) => {
+    if (index % 2 === 1 || /[¥￥元块角毛]/.test(clause)) return clause
+    if (/(?:[2Z0-9OoIl|]{2,4}[-/.年])?[0-9OoIl|]{1,2}(?:月|[-/.])[0-9OoIl|]{1,2}[日号]?|\d{1,2}:\d{2}/.test(clause)) return clause
+    return clause.replace(bareAmountPattern, (_match, value: string, suffix: string) => `${spokenNumberValue(value)}元${suffix}`)
+  }).join('')
 }
 
 const extractAmount = (text: string) => {
@@ -227,7 +234,7 @@ export const parseQuickEntry = (raw: string, fallbackAccount = '微信', now = n
   const text = normalizeSpokenText(raw.trim()).replace(/(?<=[\u3400-\u9fff])[ \t]+(?=[\u3400-\u9fff])/g, '')
   if (!text) throw new Error('请粘贴支付通知，或输入一句记账内容。')
   const amount = extractAmount(text)
-  if (!amount || !Number.isFinite(amount)) throw new Error('没有识别到金额，请尝试写成“午饭35元，微信支付”。')
+  if (!amount || !Number.isFinite(amount)) throw new Error('没有识别到金额，请尝试写成“午饭35”或“午饭35元”。')
 
   const type = extractType(text)
   const account = extractAccount(text, fallbackAccount)
