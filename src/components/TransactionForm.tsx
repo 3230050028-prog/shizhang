@@ -4,7 +4,7 @@ import { defaultAccounts, expenseCategories, incomeCategories } from '../data'
 import { toLocalDate } from '../lib/date'
 import { applyRememberedCategory, buildMerchantCategoryMemory } from '../lib/merchantCategory'
 import { transactionFingerprint } from '../lib/paymentImport'
-import { parseQuickEntries, parseQuickEntry } from '../lib/quickEntry'
+import { parseConversationalEntries, parseQuickEntries } from '../lib/quickEntry'
 import { recognizePaymentImage } from '../lib/imageOcr'
 import type { ActionResult, Transaction, TransactionInput, TransactionType } from '../types'
 
@@ -93,9 +93,22 @@ export function TransactionForm({ initial, transactions, knownCategories, knownA
     setKeepDuplicates([])
     setBatchResult(null)
     try {
-      const result = parseQuickEntry(text, account, new Date())
-      const input = applyRememberedCategory(result.input, merchantCategoryMemory)
-      const remembered = input.category !== result.input.category
+      const parsedResults = parseConversationalEntries(text, account, new Date())
+      const results = parsedResults.map((result) => ({
+        ...result,
+        input: applyRememberedCategory(result.input, merchantCategoryMemory),
+      }))
+      if (results.length > 1) {
+        setOcrCandidates(results.map((result) => result.input))
+        setOcrWarnings(results.map((result) => result.warnings))
+        setIncludeCandidates(results.map(() => true))
+        setKeepDuplicates(results.map(() => false))
+        setSmartMessage(`从这句话中识别到 ${results.length} 笔账目，请逐笔检查后批量保存。`)
+        return
+      }
+      const result = results[0]
+      const input = result.input
+      const remembered = input.category !== parsedResults[0].input.category
       setType(input.type)
       setAmount(String(input.amount))
       setCategory(input.category)
@@ -328,7 +341,7 @@ export function TransactionForm({ initial, transactions, knownCategories, knownA
               <textarea
                 value={smartText}
                 onChange={(event) => setSmartText(event.target.value)}
-                placeholder="例如：昨天晚饭三十五块五，微信付的"
+                placeholder="例如：昨天早餐8元，地铁4元，午饭25元，微信付的"
                 rows={3}
               />
               <div className="smart-entry-actions">

@@ -248,6 +248,25 @@ export const parseQuickEntry = (raw: string, fallbackAccount = '微信', now = n
   }
 }
 
+const hasTypeSignal = (text: string) => /收入|收款|收到|到账|入账|进账|工资|薪资|奖金|退款|返现|红包|赚了|支出|消费|花了|花费|付了|支付了|用了|买了/.test(text)
+
+export const parseConversationalEntries = (raw: string, fallbackAccount = '微信', now = new Date()) => {
+  const text = normalizeSpokenText(raw.trim()).replace(/元[+＋](?=\S)/g, '元，')
+  const clauses = text.split(/(?:，|(?<!\d),(?!\d)|[；;、]|然后|接着|随后)/)
+    .map((clause) => clause.trim())
+    .filter((clause) => clause && extractAmount(clause) > 0)
+  if (clauses.length <= 1) return [parseQuickEntry(raw, fallbackAccount, now)]
+
+  const sharedDate = extractExplicitDate(text, now) ?? toLocalDate(now)
+  const sharedAccount = extractAccount(text, fallbackAccount)
+  const sharedType = text.match(/^\s*(收入|支出)/)?.[1]
+  return clauses.slice(0, 20).map((clause) => {
+    const dateContext = extractExplicitDate(clause, now) ? '' : `\n${sharedDate}`
+    const typeContext = sharedType && !hasTypeSignal(clause) ? `\n${sharedType}` : ''
+    return parseQuickEntry(`${clause}\n${sharedAccount}${dateContext}${typeContext}`, sharedAccount, now)
+  })
+}
+
 const looseLineAmount = (line: string) => {
   const regular = extractAmount(line)
   if (regular) return regular

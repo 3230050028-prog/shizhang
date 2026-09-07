@@ -73,7 +73,7 @@ export const inferTransactionCategory = (value: string, type: TransactionType) =
     return '其他'
   }
 
-  if (/餐饮|美食|饭|餐厅|外卖|奶茶|咖啡|超市|星巴克|瑞幸|肯德基|麦当劳/.test(value)) return '餐饮'
+  if (/餐饮|美食|早餐|午餐|晚餐|早饭|午饭|晚饭|餐厅|外卖|奶茶|咖啡|超市|星巴克|瑞幸|肯德基|麦当劳/.test(value)) return '餐饮'
   if (/交通|出行|打车|公交|地铁|加油|停车|车票/.test(value)) return '交通'
   if (/购物|百货|服饰|数码|淘宝|京东|拼多多/.test(value)) return '购物'
   if (/居住|住房|房租|物业|水费|电费|燃气/.test(value)) return '居住'
