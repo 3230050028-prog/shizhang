@@ -304,6 +304,13 @@ a { color: inherit; text-decoration: none; }
 .smart-entry-title b, .smart-entry-title small { display: block; }
 .smart-entry-title b { color: var(--ink); font-size: 13px; }
 .smart-entry-title small { margin-top: 2px; color: var(--muted); font-size: 10px; line-height: 1.4; }
+.quick-templates { display: grid; gap: 6px; }
+.quick-templates > small { color: var(--muted); font-size: 9px; }
+.quick-templates > div { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: thin; }
+.quick-templates button { display: flex; flex: 0 0 auto; align-items: center; gap: 7px; min-height: 32px; padding: 0 9px; color: var(--ink); border: 1px solid #d2dfd5; border-radius: 9px; background: rgba(255,255,255,.9); cursor: pointer; }
+.quick-templates button:hover { color: var(--green-700); border-color: #9fbaa7; background: white; }
+.quick-templates button b { max-width: 92px; overflow: hidden; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.quick-templates button span { color: var(--green-700); font-size: 9px; font-weight: 700; }
 .ocr-upload { display: grid !important; grid-template-columns: 34px minmax(0, 1fr) auto; align-items: center; gap: 10px !important; padding: 10px 11px; color: var(--green-700) !important; border: 1px dashed #b9cdbf; border-radius: 10px; background: rgba(255,255,255,.82); cursor: pointer; }
 .ocr-upload:hover { border-color: var(--green-600); background: white; }
 .ocr-upload > svg { justify-self: center; }

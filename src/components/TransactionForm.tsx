@@ -6,6 +6,7 @@ import { applyRememberedCategory, buildMerchantCategoryMemory } from '../lib/mer
 import { transactionFingerprint } from '../lib/paymentImport'
 import { parseConversationalEntries, parseQuickEntries } from '../lib/quickEntry'
 import { recognizePaymentImage } from '../lib/imageOcr'
+import { buildQuickTemplates } from '../lib/transactionTemplates'
 import type { ActionResult, Transaction, TransactionInput, TransactionType } from '../types'
 
 interface TransactionFormProps {
@@ -45,6 +46,7 @@ export function TransactionForm({ initial, transactions, knownCategories, knownA
   const [batchResult, setBatchResult] = useState<{ saved: number; skipped: number; failed: number } | null>(null)
   const [batchSaving, setBatchSaving] = useState(false)
   const merchantCategoryMemory = useMemo(() => buildMerchantCategoryMemory(transactions), [transactions])
+  const quickTemplates = useMemo(() => buildQuickTemplates(transactions, toLocalDate(new Date())), [transactions])
   const reviewIssueCount = ocrWarnings.filter((warnings) => warnings.length > 0).length
   const duplicateFlags = useMemo(() => {
     const seen = new Set(transactions.map(transactionFingerprint))
@@ -81,6 +83,25 @@ export function TransactionForm({ initial, transactions, knownCategories, knownA
     setType(nextType)
     setCategory(nextType === 'expense' ? expenseCategories[0] : incomeCategories[0])
     setCustomCategory('')
+  }
+
+  const applyQuickTemplate = (template: TransactionInput) => {
+    setType(template.type)
+    setAmount(String(template.amount))
+    setCategory(template.category)
+    setAccount(template.account)
+    setNote(template.note)
+    setDate(toLocalDate(new Date()))
+    setCustomCategory('')
+    setCustomAccount('')
+    setSmartError('')
+    setSmartMessage(`已套用“${template.note}”，日期已更新为今天，请检查后保存。`)
+    setOcrCandidates([])
+    setOcrWarnings([])
+    setOcrReviewed(false)
+    setIncludeCandidates([])
+    setKeepDuplicates([])
+    setBatchResult(null)
   }
 
   const applySmartText = (text = smartText) => {
@@ -326,6 +347,23 @@ export function TransactionForm({ initial, transactions, knownCategories, knownA
                 <span><Sparkles size={17} /></span>
                 <div><b>半自动记账</b><small>粘贴支付通知或输入一句话，自动填好下面的表单</small></div>
               </div>
+              {quickTemplates.length > 0 && (
+                <div className="quick-templates">
+                  <small>常用模板 · 根据你的历史账目自动生成</small>
+                  <div>
+                    {quickTemplates.map((template) => (
+                      <button
+                        type="button"
+                        key={`${template.type}-${template.note}`}
+                        onClick={() => applyQuickTemplate(template)}
+                        aria-label={`套用${template.note}，${template.amount}元`}
+                      >
+                        <b>{template.note}</b><span>¥{template.amount.toFixed(2)}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
               <label className={ocrLoading ? 'ocr-upload disabled' : 'ocr-upload'}>
                 <ImagePlus size={18} />
                 <span><b>{ocrFileName || '选择支付截图'}</b><small>支付宝或微信付款详情截图</small></span>
