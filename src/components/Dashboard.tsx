@@ -39,6 +39,7 @@ import {
 import { categoryColors } from '../data'
 import { escapeCsv } from '../lib/csv'
 import { toLocalMonth } from '../lib/date'
+import { buildRecurringSuggestions } from '../lib/recurringTransactions'
 import type { ActionResult, Budget, SavedAccount, SavedCategory, Transaction, TransactionInput, TransactionType } from '../types'
 import { BudgetForm } from './BudgetForm'
 import { ExpenseCalendar } from './ExpenseCalendar'
@@ -107,6 +108,7 @@ export function Dashboard({
 }: DashboardProps) {
   const [showForm, setShowForm] = useState(false)
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null)
+  const [suggestedTransaction, setSuggestedTransaction] = useState<TransactionInput | null>(null)
   const [showBudgetForm, setShowBudgetForm] = useState(false)
   const [showImport, setShowImport] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -156,6 +158,10 @@ export function Dashboard({
   const budgetAmount = Number(currentBudget?.amount ?? 0)
   const budgetPercent = budgetAmount ? Math.round((expense / budgetAmount) * 100) : 0
   const isOverBudget = budgetAmount > 0 && expense > budgetAmount
+  const recurringSuggestions = useMemo(
+    () => month === toLocalMonth() ? buildRecurringSuggestions(transactions, month) : [],
+    [month, transactions],
+  )
 
   const knownCategories = useMemo(() => ({
     income: [...new Set([
@@ -259,6 +265,12 @@ export function Dashboard({
     window.requestAnimationFrame(() => document.getElementById('records')?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
   }
 
+  const openRecurringSuggestion = (input: TransactionInput) => {
+    setEditingTransaction(null)
+    setSuggestedTransaction(input)
+    setShowForm(true)
+  }
+
   const hasFilters = Boolean(query.trim()) || typeFilter !== 'all' || categoryFilter !== 'all' || accountFilter !== 'all' || Boolean(dayFilter)
 
   const displayMonth = new Intl.DateTimeFormat('zh-CN', {
@@ -355,6 +367,28 @@ export function Dashboard({
           </button>
         </section>
 
+        {recurringSuggestions.length > 0 && (
+          <section className="panel recurring-panel" aria-labelledby="recurring-title">
+            <header className="panel-header">
+              <div><p className="eyebrow">按时记账</p><h2 id="recurring-title">本月周期提醒</h2></div>
+              <span><Bell size={14} />根据历史账目推测</span>
+            </header>
+            <div className="recurring-list">
+              {recurringSuggestions.map((suggestion) => (
+                <button type="button" key={suggestion.key} onClick={() => openRecurringSuggestion(suggestion.input)}>
+                  <span className={suggestion.input.type === 'income' ? 'recurring-icon income' : 'recurring-icon expense'}>
+                    {suggestion.input.type === 'income' ? <ArrowDownLeft size={17} /> : <ArrowUpRight size={17} />}
+                  </span>
+                  <span><b>{suggestion.input.note}</b><small>预计 {suggestion.expectedDay} 日 · 近几个月出现 {suggestion.occurrences} 次</small></span>
+                  <strong>{money.format(suggestion.input.amount)}</strong>
+                  <span className="recurring-action">去记录<ChevronRight size={14} /></span>
+                </button>
+              ))}
+            </div>
+            <p className="recurring-note">提醒来自历史规律，仅供参考；点击后请检查日期和金额再保存。</p>
+          </section>
+        )}
+
         <section className="content-grid">
           <article className="panel chart-panel" id="insight">
             <header className="panel-header"><div><p className="eyebrow">支出去向</p><h2>分类统计</h2></div></header>
@@ -434,11 +468,12 @@ export function Dashboard({
       <button className="mobile-add" onClick={() => setShowForm(true)} aria-label="智能记账"><Plus size={24} /></button>
       {(showForm || editingTransaction) && (
         <TransactionForm
-          initial={editingTransaction ?? undefined}
+          initial={editingTransaction ?? suggestedTransaction ?? undefined}
+          editing={Boolean(editingTransaction)}
           transactions={transactions}
           knownCategories={knownCategories}
           knownAccounts={knownAccounts}
-          onClose={() => { setShowForm(false); setEditingTransaction(null) }}
+          onClose={() => { setShowForm(false); setEditingTransaction(null); setSuggestedTransaction(null) }}
           onSave={(input) => editingTransaction ? onUpdate(editingTransaction.id, input) : onAdd(input)}
           onSaveBatch={onAddBatch}
           onSaved={showSavedRecord}

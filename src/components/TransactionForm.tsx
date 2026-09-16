@@ -11,6 +11,7 @@ import type { ActionResult, Transaction, TransactionInput, TransactionType } fro
 
 interface TransactionFormProps {
   initial?: TransactionInput
+  editing?: boolean
   transactions: Transaction[]
   knownCategories?: Record<TransactionType, string[]>
   knownAccounts?: string[]
@@ -20,7 +21,7 @@ interface TransactionFormProps {
   onSaved?: (input: TransactionInput) => void
 }
 
-export function TransactionForm({ initial, transactions, knownCategories, knownAccounts, onClose, onSave, onSaveBatch, onSaved }: TransactionFormProps) {
+export function TransactionForm({ initial, editing, transactions, knownCategories, knownAccounts, onClose, onSave, onSaveBatch, onSaved }: TransactionFormProps) {
   const [type, setType] = useState<TransactionType>(initial?.type ?? 'expense')
   const [amount, setAmount] = useState(initial ? String(initial.amount) : '')
   const [category, setCategory] = useState(initial?.category ?? expenseCategories[0])
@@ -333,7 +334,7 @@ export function TransactionForm({ initial, transactions, knownCategories, knownA
         <header>
           <div>
             <p className="eyebrow">快速记录</p>
-            <h2 id="transaction-title">{initial ? '编辑账目' : '记一笔'}</h2>
+            <h2 id="transaction-title">{editing ? '编辑账目' : '记一笔'}</h2>
           </div>
           <button className="icon-button" type="button" onClick={onClose} aria-label="关闭">
             <X size={20} />
