@@ -5,6 +5,7 @@ import { Dashboard } from './components/Dashboard'
 import { PasswordRecovery } from './components/PasswordRecovery'
 import { SplashScreen } from './components/SplashScreen'
 import { demoTransactions } from './data'
+import { BatchSaveError, saveInBatches } from './lib/batchSave'
 import { toLocalMonth } from './lib/date'
 import { clearPasswordRecoveryRequest, readPasswordRecoveryRequest } from './lib/passwordRecovery'
 import { isSupabaseConfigured, supabase } from './lib/supabase'
@@ -324,26 +325,39 @@ function App() {
       return { ok: true, saved: inputs.length, failed: 0 }
     }
 
-    const batchSize = 100
-    let completed = 0
+    const cloudClient = supabase
+    const rows = inputs.map((input) => ({
+      ...input,
+      id: crypto.randomUUID(),
+      user_id: session.user.id,
+    }))
+
     try {
-      for (let start = 0; start < inputs.length; start += batchSize) {
-        const batch = inputs.slice(start, start + batchSize)
-        const { data, error } = await supabase
+      const saved = await saveInBatches(rows, async (batch) => {
+        const { data, error } = await cloudClient
           .from('transactions')
-          .insert(batch.map((input) => ({ ...input, user_id: session.user.id })))
+          .upsert(batch, { onConflict: 'id' })
           .select()
-        if (error) return { ...failure(`已导入 ${completed} 笔，后续保存失败`, error), saved: completed, failed: inputs.length - completed }
-        const saved = (data as Transaction[] | null) ?? []
-        setTransactions((current) => [...saved, ...current])
-        completed += saved.length
-        onProgress?.(completed)
-      }
+        if (error) throw error
+        const savedBatch = (data as Transaction[] | null) ?? []
+        setTransactions((current) => [...savedBatch, ...current])
+        return savedBatch
+      }, { batchSize: 20, maxAttempts: 3, onProgress })
 
       void persistImportMetadata(inputs)
-      return { ok: true, saved: completed, failed: 0 }
+      return { ok: true, saved: saved.length, failed: 0 }
     } catch (error) {
-      return { ...failure(`已导入 ${completed} 笔，后续保存失败`, error), saved: completed, failed: inputs.length - completed }
+      if (error instanceof BatchSaveError) {
+        const prefix = error.retryable
+          ? `网络连接不稳定，已自动重试；已确认导入 ${error.savedCount} 笔，剩余 ${error.failedCount} 笔未能确认。请恢复网络后刷新账本，再重新选择原文件，已保存记录会自动跳过`
+          : `已导入 ${error.savedCount} 笔，后续保存失败`
+        return {
+          ...failure(prefix, error.originalError),
+          saved: error.savedCount,
+          failed: error.failedCount,
+        }
+      }
+      return { ...failure('账单保存失败', error), saved: 0, failed: inputs.length }
     }
   }
 
