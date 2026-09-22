@@ -151,6 +151,10 @@ a { color: inherit; text-decoration: none; }
 .recovery-card > .muted { margin: 0 0 28px; }
 .recovery-card form { display: grid; gap: 18px; }
 .recovery-card .form-message { display: flex; align-items: center; gap: 7px; }
+.recovery-link-error { display: grid; grid-template-columns: 28px 1fr; gap: 10px; margin: 24px 0 12px; padding: 14px; color: #894a39; border: 1px solid #efc8bc; border-radius: 12px; background: #fff3ee; }
+.recovery-link-error b { font-size: 13px; }
+.recovery-link-error p { margin: 5px 0 0; font-size: 11px; line-height: 1.55; }
+.recovery-back { width: 100%; margin-top: 14px; padding: 9px; color: var(--green-700); border: 0; background: transparent; font-size: 11px; font-weight: 700; }
 
 /* Dashboard shell */
 .app-shell { min-height: 100vh; }

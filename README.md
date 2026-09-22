@@ -74,7 +74,7 @@ React 把登录页、总览、记账弹窗、图表和日历拆成可以复用�
 
 ### 4. GitHub Actions 如何自动部署
 
-代码推送到 `main` 分支后，GitHub Actions 会自动执行 `npm ci`、`npm test` 和 `npm run build`。只有测试和构建都成功，生成的 `dist` 文件才会发布到 GitHub Pages。因此失败的代码不会被部署到线上。
+代码推送到 `main` 分支后，GitHub Actions 会自动执行 `npm ci`、`npm test`、`npm run lint` 和 `npm run build`。只有测试、检查和构建都成功，生成的 `dist` 文件才会发布到 GitHub Pages。因此失败的代码不会被部署到线上。
 
 ### 5. 如何定位、测试和修改问题
 
@@ -99,6 +99,7 @@ React 把登录页、总览、记账弹窗、图表和日历拆成可以复用�
 - “昨天买奶茶12.5元”识别正确日期和金额。
 - 相同账目生成相同指纹，不同日期不会被误判为重复。
 - OCR 文本中的月度收入和支出汇总金额不会生成单笔账目。
+- 密码重置回调能进入设置新密码页面，并能识别过期链接。
 
 ```bash
 npm test

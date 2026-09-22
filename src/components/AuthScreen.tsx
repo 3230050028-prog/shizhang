@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { ArrowRight, CheckCircle2, Eye, EyeOff, Leaf, MailCheck } from 'lucide-react'
+import { buildPasswordRecoveryRedirect } from '../lib/passwordRecovery'
 import { supabase } from '../lib/supabase'
 
 const translateAuthError = (message: string) => {
@@ -67,10 +68,13 @@ export function AuthScreen() {
     setLoading(true)
     setMessage('')
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: new URL(import.meta.env.BASE_URL, window.location.origin).toString(),
+      const normalizedEmail = email.trim()
+      const { error } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
+        redirectTo: buildPasswordRecoveryRedirect(window.location.origin, import.meta.env.BASE_URL),
       })
-      setMessage(error ? translateAuthError(error.message) : `重置邮件已发送到 ${email.trim()}，请检查邮箱。`)
+      setMessage(error
+        ? translateAuthError(error.message)
+        : `如果 ${normalizedEmail} 已注册，几分钟内会收到重置邮件。请点击邮件中的链接，并检查垃圾邮件箱。`)
     } catch {
       setMessage('网络连接失败，请稍后重试。')
     } finally {

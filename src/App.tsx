@@ -6,12 +6,14 @@ import { PasswordRecovery } from './components/PasswordRecovery'
 import { SplashScreen } from './components/SplashScreen'
 import { demoTransactions } from './data'
 import { toLocalMonth } from './lib/date'
+import { clearPasswordRecoveryRequest, readPasswordRecoveryRequest } from './lib/passwordRecovery'
 import { isSupabaseConfigured, supabase } from './lib/supabase'
 import type { ActionResult, Budget, SavedAccount, SavedCategory, Transaction, TransactionInput } from './types'
 
 const demoStorageKey = 'shizhang-demo-transactions'
 const demoBudgetStorageKey = 'shizhang-demo-budgets'
 const demoAccountStorageKey = 'shizhang-demo-accounts'
+const initialRecoveryRequest = readPasswordRecoveryRequest(window.location.href)
 
 const normalizeTransaction = (transaction: Transaction): Transaction => ({
   ...transaction,
@@ -72,7 +74,8 @@ function App() {
   const [dataLoading, setDataLoading] = useState(false)
   const [loadError, setLoadError] = useState('')
   const [loadAttempt, setLoadAttempt] = useState(0)
-  const [recoveryMode, setRecoveryMode] = useState(false)
+  const [recoveryMode, setRecoveryMode] = useState(initialRecoveryRequest.requested)
+  const [recoveryError, setRecoveryError] = useState(initialRecoveryRequest.error)
   const [transactions, setTransactions] = useState<Transaction[]>(() =>
     cloudEnabled ? [] : loadDemoTransactions(),
   )
@@ -92,14 +95,23 @@ function App() {
   useEffect(() => {
     if (!cloudEnabled || !supabase) return
 
-    supabase.auth.getSession().then(({ data }) => {
+    void supabase.auth.getSession().then(({ data, error }) => {
       setSession(data.session)
       setAuthLoading(false)
       setDataLoading(Boolean(data.session))
+      if (initialRecoveryRequest.requested && !data.session) {
+        setRecoveryError(initialRecoveryRequest.error || error?.message || '这个重置链接无效或已经过期，请重新申请。')
+      }
+    }).catch(() => {
+      setAuthLoading(false)
+      if (initialRecoveryRequest.requested) setRecoveryError('无法验证重置链接，请检查网络后重新打开邮件链接。')
     })
 
     const { data: listener } = supabase.auth.onAuthStateChange((event, nextSession) => {
-      if (event === 'PASSWORD_RECOVERY') setRecoveryMode(true)
+      if (event === 'PASSWORD_RECOVERY') {
+        setRecoveryMode(true)
+        setRecoveryError('')
+      }
       setSession(nextSession)
       setAuthLoading(false)
       setDataLoading(Boolean(nextSession))
@@ -113,6 +125,20 @@ function App() {
 
     return () => listener.subscription.unsubscribe()
   }, [cloudEnabled])
+
+  const clearPasswordRecoveryLocation = () => {
+    window.history.replaceState(null, '', clearPasswordRecoveryRequest(window.location.href))
+    setRecoveryError('')
+    setRecoveryMode(false)
+  }
+
+  const cancelPasswordRecovery = async () => {
+    try {
+      if (supabase) await supabase.auth.signOut()
+    } finally {
+      clearPasswordRecoveryLocation()
+    }
+  }
 
   useEffect(() => {
     if (!cloudEnabled) localStorage.setItem(demoStorageKey, JSON.stringify(transactions))
@@ -400,7 +426,9 @@ function App() {
     return <div className="app-loading"><span className="brand-mark">拾</span><p>正在打开账本…</p></div>
   }
 
-  if (recoveryMode) return <PasswordRecovery onComplete={() => setRecoveryMode(false)} />
+  if (recoveryMode) {
+    return <PasswordRecovery initialError={recoveryError} onComplete={clearPasswordRecoveryLocation} onCancel={cancelPasswordRecovery} />
+  }
 
   if (cloudEnabled && !session) return <AuthScreen />
 
