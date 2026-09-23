@@ -1,4 +1,4 @@
-import type { TransactionInput, TransactionType } from '../types'
+import type { Transaction, TransactionInput, TransactionType } from '../types'
 
 export interface ParsedPaymentRow extends TransactionInput {
   sourceLine: number
@@ -101,6 +101,33 @@ export const transactionFingerprint = (row: TransactionInput) => {
   const merchant = row.note.trim().replace(/\s+/g, '').toLocaleLowerCase('zh-CN')
     || `${row.category.trim()}|${row.account.trim()}`
   return [row.occurred_on, row.type, Number(row.amount).toFixed(2), merchant].join('|')
+}
+
+const transactionMatchKey = (row: TransactionInput) => {
+  const merchant = row.note.trim().replace(/\s+/g, '').toLocaleLowerCase('zh-CN')
+    || `${row.category.trim()}|${row.account.trim()}`
+  return [row.type, Number(row.amount).toFixed(2), merchant].join('|')
+}
+
+export interface PaymentDateCorrection<TIncoming extends TransactionInput = TransactionInput> {
+  incoming: TIncoming
+  existing: Transaction
+}
+
+export const findPaymentDateCorrections = <T extends TransactionInput>(rows: T[], transactions: Transaction[]) => {
+  const incomingByKey = new Map<string, T[]>()
+  const existingByKey = new Map<string, Transaction[]>()
+  rows.forEach((row) => incomingByKey.set(transactionMatchKey(row), [...(incomingByKey.get(transactionMatchKey(row)) ?? []), row]))
+  transactions.forEach((row) => existingByKey.set(transactionMatchKey(row), [...(existingByKey.get(transactionMatchKey(row)) ?? []), row]))
+
+  const corrections: PaymentDateCorrection<T>[] = []
+  incomingByKey.forEach((incoming, key) => {
+    const existing = existingByKey.get(key) ?? []
+    if (incoming.length !== 1 || existing.length !== 1) return
+    if (incoming[0].occurred_on === existing[0].occurred_on) return
+    corrections.push({ incoming: incoming[0], existing: existing[0] })
+  })
+  return corrections
 }
 
 export const splitPaymentRows = <T extends TransactionInput>(rows: T[], existingFingerprints: Iterable<string>) => {

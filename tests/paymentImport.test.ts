@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parsePaymentStatement, spreadsheetCellToText, splitPaymentRows, transactionFingerprint } from '../src/lib/paymentImport'
+import { findPaymentDateCorrections, parsePaymentStatement, spreadsheetCellToText, splitPaymentRows, transactionFingerprint } from '../src/lib/paymentImport'
 import type { TransactionInput } from '../src/types'
 
 const payment: TransactionInput = {
@@ -30,6 +30,25 @@ describe('账单重复检测', () => {
 
     expect(result.uniqueRows).toEqual([newPayment])
     expect(result.duplicateRows).toEqual([payment])
+  })
+
+  it('金额和商户唯一对应时可核对并修正日期', () => {
+    const existing = { ...payment, id: 'existing', occurred_on: '2026-09-20' }
+    const incoming = { ...payment, occurred_on: '2026-09-22' }
+
+    const corrections = findPaymentDateCorrections([incoming], [existing])
+
+    expect(corrections).toEqual([{ incoming, existing }])
+  })
+
+  it('同金额同商户出现多次时不自动修正日期', () => {
+    const existing = { ...payment, id: 'existing', occurred_on: '2026-09-20' }
+    const incoming = [
+      { ...payment, occurred_on: '2026-09-21' },
+      { ...payment, occurred_on: '2026-09-22' },
+    ]
+
+    expect(findPaymentDateCorrections(incoming, [existing])).toEqual([])
   })
 })
 

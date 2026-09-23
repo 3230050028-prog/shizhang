@@ -459,6 +459,21 @@ a { color: inherit; text-decoration: none; }
 .import-preview strong.expense { color: #34443b; }
 .duplicate-preview { border-color: #dfd2aa; }
 .duplicate-preview > p { color: #756126; background: #fff9e8; }
+.date-correction-panel { display: grid; gap: 10px; margin: 0 0 14px; padding: 12px; border: 1px solid #d6c68f; border-radius: 12px; background: #fffbec; }
+.date-correction-heading { display: flex; align-items: center; gap: 9px; }
+.date-correction-heading > span { display: grid; flex: 0 0 auto; place-items: center; width: 34px; height: 34px; color: #7d651c; border-radius: 9px; background: #f4e9bd; }
+.date-correction-heading b, .date-correction-heading small { display: block; }
+.date-correction-heading b { color: #594916; font-size: 11px; }
+.date-correction-heading small { margin-top: 3px; color: #806f3b; font-size: 8px; }
+.date-correction-list { overflow: hidden; border: 1px solid #eadfb9; border-radius: 9px; background: white; }
+.date-correction-list > div { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 10px; border-bottom: 1px solid #f0ead5; }
+.date-correction-list > div:last-child { border-bottom: 0; }
+.date-correction-list b, .date-correction-list small { display: block; }
+.date-correction-list b { font-size: 10px; }
+.date-correction-list small { margin-top: 2px; color: #8a7020; font-size: 9px; }
+.date-correction-list strong { flex: 0 0 auto; font-size: 10px; }
+.date-correction-panel > button { min-height: 38px; color: white; border: 0; border-radius: 9px; background: #8a6d1d; font-size: 10px; font-weight: 700; }
+.date-correction-panel > button:disabled { cursor: wait; opacity: .65; }
 .import-note { margin: 0 0 13px; color: var(--muted); font-size: 10px; line-height: 1.5; }
 .import-progress { display: grid; gap: 7px; margin: 0 0 13px; }
 .import-progress > span { height: 7px; overflow: hidden; border-radius: 99px; background: #e3eae5; }

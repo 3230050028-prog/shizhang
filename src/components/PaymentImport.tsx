@@ -10,10 +10,11 @@ import {
   Mail,
   Search,
   Smartphone,
+  CalendarClock,
   Upload,
   X,
 } from 'lucide-react'
-import { readPaymentStatement, splitPaymentRows, transactionFingerprint, ZipPasswordRequiredError, type ParsedPaymentRow } from '../lib/paymentImport'
+import { findPaymentDateCorrections, readPaymentStatement, splitPaymentRows, transactionFingerprint, ZipPasswordRequiredError, type ParsedPaymentRow, type PaymentDateCorrection } from '../lib/paymentImport'
 import { applyRememberedCategory, buildMerchantCategoryMemory } from '../lib/merchantCategory'
 import type { ActionResult, Transaction, TransactionInput } from '../types'
 
@@ -21,17 +22,19 @@ interface PaymentImportProps {
   transactions: Transaction[]
   onClose: () => void
   onImport: (rows: TransactionInput[], onProgress?: (completed: number) => void) => Promise<ActionResult>
+  onCorrectDates: (rows: Transaction[], onProgress?: (completed: number) => void) => Promise<ActionResult>
 }
 
 const money = new Intl.NumberFormat('zh-CN', { style: 'currency', currency: 'CNY' })
 
-export function PaymentImport({ transactions, onClose, onImport }: PaymentImportProps) {
+export function PaymentImport({ transactions, onClose, onImport, onCorrectDates }: PaymentImportProps) {
   const [fileName, setFileName] = useState('')
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [zipPassword, setZipPassword] = useState('')
   const [needsPassword, setNeedsPassword] = useState(false)
   const [rows, setRows] = useState<ParsedPaymentRow[]>([])
   const [duplicateRows, setDuplicateRows] = useState<ParsedPaymentRow[]>([])
+  const [dateCorrections, setDateCorrections] = useState<PaymentDateCorrection<ParsedPaymentRow>[]>([])
   const [skipped, setSkipped] = useState(0)
   const [duplicates, setDuplicates] = useState(0)
   const [remembered, setRemembered] = useState(0)
@@ -39,6 +42,9 @@ export function PaymentImport({ transactions, onClose, onImport }: PaymentImport
   const [importing, setImporting] = useState(false)
   const [importProgress, setImportProgress] = useState(0)
   const [imported, setImported] = useState<number | null>(null)
+  const [correctingDates, setCorrectingDates] = useState(false)
+  const [correctionProgress, setCorrectionProgress] = useState(0)
+  const [correctedDates, setCorrectedDates] = useState<number | null>(null)
   const [showGuide, setShowGuide] = useState(true)
   const [showDuplicatePreview, setShowDuplicatePreview] = useState(false)
   const existing = useMemo(
@@ -54,9 +60,16 @@ export function PaymentImport({ transactions, onClose, onImport }: PaymentImport
       const result = await readPaymentStatement(file, password)
       const rememberedRows = result.rows.map((row) => applyRememberedCategory(row, merchantCategoryMemory))
       setRemembered(rememberedRows.filter((row, index) => row.category !== result.rows[index].category).length)
-      const { uniqueRows, duplicateRows: foundDuplicates } = splitPaymentRows(rememberedRows, existing)
+      const corrections = findPaymentDateCorrections(rememberedRows, transactions)
+      const correctionLines = new Set(corrections.map(({ incoming }) => incoming.sourceLine))
+      const { uniqueRows, duplicateRows: foundDuplicates } = splitPaymentRows(
+        rememberedRows.filter((row) => !correctionLines.has(row.sourceLine)),
+        existing,
+      )
       setRows(uniqueRows.slice(0, 500))
       setDuplicateRows(foundDuplicates.slice(0, 500))
+      setDateCorrections(corrections.slice(0, 500))
+      setCorrectedDates(null)
       setSkipped(result.skipped + Math.max(0, uniqueRows.length - 500))
       setDuplicates(foundDuplicates.length)
       setShowDuplicatePreview(!uniqueRows.length && foundDuplicates.length > 0)
@@ -65,6 +78,7 @@ export function PaymentImport({ transactions, onClose, onImport }: PaymentImport
     } catch (reason) {
       setRows([])
       setDuplicateRows([])
+      setDateCorrections([])
       setSkipped(0)
       setDuplicates(0)
       setRemembered(0)
@@ -109,6 +123,22 @@ export function PaymentImport({ transactions, onClose, onImport }: PaymentImport
     }
     setImported(inputs.length)
     setImporting(false)
+  }
+
+  const correctDates = async () => {
+    setCorrectingDates(true)
+    setCorrectionProgress(0)
+    setError('')
+    const updates = dateCorrections.map(({ existing, incoming }) => ({ ...existing, occurred_on: incoming.occurred_on }))
+    const result = await onCorrectDates(updates, setCorrectionProgress)
+    if (!result.ok) {
+      setError(result.error ?? '日期修正失败，请稍后重试。')
+      setCorrectingDates(false)
+      return
+    }
+    setCorrectedDates(updates.length)
+    setDateCorrections([])
+    setCorrectingDates(false)
   }
 
   return (
@@ -244,6 +274,27 @@ export function PaymentImport({ transactions, onClose, onImport }: PaymentImport
                 ))}
               </div>
             )}
+
+            {dateCorrections.length > 0 && (
+              <div className="date-correction-panel">
+                <div className="date-correction-heading">
+                  <span><CalendarClock size={18} /></span>
+                  <div><b>发现 {dateCorrections.length} 笔日期不一致</b><small>金额和商户一一对应，只会修正已有记录的日期。</small></div>
+                </div>
+                <div className="date-correction-list">
+                  {dateCorrections.slice(0, 5).map(({ existing, incoming }) => (
+                    <div key={`correction-${existing.id}`}>
+                      <span><b>{existing.note || existing.category}</b><small>{existing.occurred_on} → {incoming.occurred_on}</small></span>
+                      <strong>{money.format(existing.amount)}</strong>
+                    </div>
+                  ))}
+                </div>
+                <button type="button" disabled={correctingDates} onClick={() => void correctDates()}>
+                  {correctingDates ? `正在修正 ${correctionProgress} / ${dateCorrections.length}` : `确认修正 ${dateCorrections.length} 笔日期`}
+                </button>
+              </div>
+            )}
+            {correctedDates !== null && <p className="import-memory-note">已修正 {correctedDates} 笔已有账目的日期，没有新增重复记录。</p>}
 
             {error && <p className="inline-error">{error}</p>}
             <p className="import-note">文件会在当前设备中读取，原文件和压缩包密码不会上传。确认导入前不会修改任何数据。</p>

@@ -386,6 +386,46 @@ function App() {
     }
   }
 
+  const correctTransactionDates = async (
+    updates: Transaction[],
+    onProgress?: (completed: number) => void,
+  ): Promise<ActionResult> => {
+    if (!updates.length) return { ok: true, saved: 0, failed: 0 }
+
+    if (!supabase || !session) {
+      const byId = new Map(updates.map((item) => [item.id, item]))
+      setTransactions((current) => current.map((item) => byId.get(item.id) ?? item))
+      onProgress?.(updates.length)
+      return { ok: true, saved: updates.length, failed: 0 }
+    }
+
+    const cloudClient = supabase
+    const rows = updates.map((item) => ({ ...item, user_id: session.user.id }))
+    try {
+      const saved = await saveInBatches(rows, async (batch) => {
+        const { data, error } = await cloudClient
+          .from('transactions')
+          .upsert(batch, { onConflict: 'id' })
+          .select()
+        if (error) throw error
+        const savedBatch = (data as Transaction[] | null) ?? []
+        const savedById = new Map(savedBatch.map((item) => [item.id, item]))
+        setTransactions((current) => current.map((item) => savedById.get(item.id) ?? item))
+        return savedBatch
+      }, { batchSize: 20, maxAttempts: 3, onProgress })
+      return { ok: true, saved: saved.length, failed: 0 }
+    } catch (error) {
+      if (error instanceof BatchSaveError) {
+        return {
+          ...failure(`已修正 ${error.savedCount} 笔日期，剩余 ${error.failedCount} 笔失败`, error.originalError),
+          saved: error.savedCount,
+          failed: error.failedCount,
+        }
+      }
+      return { ...failure('日期修正失败', error), saved: 0, failed: updates.length }
+    }
+  }
+
   const deleteTransaction = async (id: string): Promise<ActionResult> => {
     if (!supabase || !session) {
       setTransactions((current) => current.filter((item) => item.id !== id))
@@ -457,6 +497,7 @@ function App() {
       loading={dataLoading}
       onAdd={addTransaction}
       onAddBatch={addTransactions}
+      onCorrectDates={correctTransactionDates}
       onUpdate={updateTransaction}
       onDelete={deleteTransaction}
       onSaveBudget={saveBudget}
