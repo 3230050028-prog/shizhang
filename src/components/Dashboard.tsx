@@ -40,6 +40,7 @@ import { categoryColors } from '../data'
 import { escapeCsv } from '../lib/csv'
 import { toLocalMonth } from '../lib/date'
 import { findDuplicateTransactionCopies } from '../lib/paymentImport'
+import { findReconciliationCleanupMatches, reconciliationCleanupTargetCount } from '../lib/reconciliationCleanup'
 import { buildRecurringSuggestions } from '../lib/recurringTransactions'
 import type { ActionResult, Budget, SavedAccount, SavedCategory, Transaction, TransactionInput, TransactionType } from '../types'
 import { BudgetForm } from './BudgetForm'
@@ -124,6 +125,7 @@ export function Dashboard({
   const [accountFilter, setAccountFilter] = useState('all')
   const [dayFilter, setDayFilter] = useState<string | null>(null)
   const duplicateCopyCount = useMemo(() => findDuplicateTransactionCopies(transactions).length, [transactions])
+  const reconciliationCleanup = useMemo(() => findReconciliationCleanupMatches(transactions), [transactions])
   const [operationError, setOperationError] = useState('')
   const [operationSuccess, setOperationSuccess] = useState('')
 
@@ -221,6 +223,22 @@ export function Dashboard({
   const deleteItem = async (id: string) => {
     const result = await onDelete(id)
     if (!result.ok) setOperationError(result.error ?? '删除失败，请稍后重试。')
+  }
+
+  const deleteReconciledTransactions = async () => {
+    setOperationError('')
+    if (!reconciliationCleanup.ready) {
+      setOperationError(`核对名单未能完整匹配：找到 ${reconciliationCleanup.ids.length} 笔，缺少 ${reconciliationCleanup.missing.length} 笔，冲突 ${reconciliationCleanup.ambiguous.length} 笔。为避免误删，未执行任何操作。`)
+      return
+    }
+    if (!window.confirm(`已精确匹配 ${reconciliationCleanupTargetCount} 笔核对记录。确定删除吗？删除后无法在网页内撤销。`)) return
+
+    const result = await onDeleteDuplicates(reconciliationCleanup.ids)
+    if (!result.ok || result.saved !== reconciliationCleanup.ids.length) {
+      setOperationError(result.error ?? `只删除了 ${result.saved ?? 0} / ${reconciliationCleanup.ids.length} 笔，请刷新后核对。`)
+      return
+    }
+    setOperationSuccess(`已按核对名单删除 ${result.saved} 笔记录。建议重新导出本月账单复核。`)
   }
 
   const resetFilters = () => {
@@ -334,6 +352,11 @@ export function Dashboard({
             <span>{displayMonth}<ChevronDown size={16} /></span>
           </label>
           <div className="toolbar-actions">
+            {reconciliationCleanup.ready && (
+              <button className="duplicate-cleanup-shortcut" onClick={() => void deleteReconciledTransactions()}>
+                <Trash2 size={17} />删除核对名单 {reconciliationCleanupTargetCount} 笔
+              </button>
+            )}
             <button className="duplicate-cleanup-shortcut" onClick={() => setShowImport(true)}>
               <Trash2 size={17} />{duplicateCopyCount > 0 ? `清理重复 ${duplicateCopyCount} 笔` : '检查重复'}
             </button>
