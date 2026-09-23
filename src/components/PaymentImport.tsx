@@ -201,6 +201,8 @@ export function PaymentImport({ transactions, onClose, onImport, onCorrectDates,
           </div>
         </header>
 
+        {imported === null && correctedDates === null && duplicateCleanupPanel}
+
         {imported !== null || correctedDates !== null ? (
           <div className="import-success">
             <CheckCircle2 size={42} />
@@ -343,8 +345,6 @@ export function PaymentImport({ transactions, onClose, onImport, onCorrectDates,
                 </button>
               </div>
             )}
-            {duplicateCleanupPanel}
-
             {error && <p className="inline-error">{error}</p>}
             <p className="import-note">文件会在当前设备中读取，原文件和压缩包密码不会上传。确认导入前不会修改任何数据。</p>
             {importing && (

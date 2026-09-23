@@ -39,6 +39,7 @@ import {
 import { categoryColors } from '../data'
 import { escapeCsv } from '../lib/csv'
 import { toLocalMonth } from '../lib/date'
+import { findDuplicateTransactionCopies } from '../lib/paymentImport'
 import { buildRecurringSuggestions } from '../lib/recurringTransactions'
 import type { ActionResult, Budget, SavedAccount, SavedCategory, Transaction, TransactionInput, TransactionType } from '../types'
 import { BudgetForm } from './BudgetForm'
@@ -122,6 +123,7 @@ export function Dashboard({
   const [categoryFilter, setCategoryFilter] = useState('all')
   const [accountFilter, setAccountFilter] = useState('all')
   const [dayFilter, setDayFilter] = useState<string | null>(null)
+  const duplicateCopyCount = useMemo(() => findDuplicateTransactionCopies(transactions).length, [transactions])
   const [operationError, setOperationError] = useState('')
   const [operationSuccess, setOperationSuccess] = useState('')
 
@@ -332,6 +334,11 @@ export function Dashboard({
             <span>{displayMonth}<ChevronDown size={16} /></span>
           </label>
           <div className="toolbar-actions">
+            {duplicateCopyCount > 0 && (
+              <button className="duplicate-cleanup-shortcut" onClick={() => setShowImport(true)}>
+                <Trash2 size={17} />清理重复 {duplicateCopyCount} 笔
+              </button>
+            )}
             <button className="secondary-button" onClick={() => setShowImport(true)}><Upload size={17} />导入账单</button>
             <button className="secondary-button" onClick={exportCsv}><Download size={17} />导出本月</button>
           </div>
