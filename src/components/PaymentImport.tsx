@@ -8,13 +8,14 @@ import {
   FileSpreadsheet,
   KeyRound,
   Mail,
+  Trash2,
   Search,
   Smartphone,
   CalendarClock,
   Upload,
   X,
 } from 'lucide-react'
-import { findPaymentDateCorrections, readPaymentStatement, splitPaymentRows, transactionFingerprint, ZipPasswordRequiredError, type ParsedPaymentRow, type PaymentDateCorrection } from '../lib/paymentImport'
+import { findDuplicateTransactionCopies, findPaymentDateCorrections, readPaymentStatement, splitPaymentRows, transactionFingerprint, ZipPasswordRequiredError, type ParsedPaymentRow, type PaymentDateCorrection } from '../lib/paymentImport'
 import { applyRememberedCategory, buildMerchantCategoryMemory } from '../lib/merchantCategory'
 import type { ActionResult, Transaction, TransactionInput } from '../types'
 
@@ -23,11 +24,12 @@ interface PaymentImportProps {
   onClose: () => void
   onImport: (rows: TransactionInput[], onProgress?: (completed: number) => void) => Promise<ActionResult>
   onCorrectDates: (rows: Transaction[], onProgress?: (completed: number) => void) => Promise<ActionResult>
+  onDeleteDuplicates: (ids: string[], onProgress?: (completed: number) => void) => Promise<ActionResult>
 }
 
 const money = new Intl.NumberFormat('zh-CN', { style: 'currency', currency: 'CNY' })
 
-export function PaymentImport({ transactions, onClose, onImport, onCorrectDates }: PaymentImportProps) {
+export function PaymentImport({ transactions, onClose, onImport, onCorrectDates, onDeleteDuplicates }: PaymentImportProps) {
   const [fileName, setFileName] = useState('')
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [zipPassword, setZipPassword] = useState('')
@@ -45,6 +47,9 @@ export function PaymentImport({ transactions, onClose, onImport, onCorrectDates 
   const [correctingDates, setCorrectingDates] = useState(false)
   const [correctionProgress, setCorrectionProgress] = useState(0)
   const [correctedDates, setCorrectedDates] = useState<number | null>(null)
+  const [deletingDuplicates, setDeletingDuplicates] = useState(false)
+  const [deleteProgress, setDeleteProgress] = useState(0)
+  const [deletedDuplicates, setDeletedDuplicates] = useState<number | null>(null)
   const [showGuide, setShowGuide] = useState(true)
   const [showDuplicatePreview, setShowDuplicatePreview] = useState(false)
   const existing = useMemo(
@@ -52,6 +57,7 @@ export function PaymentImport({ transactions, onClose, onImport, onCorrectDates 
     [transactions],
   )
   const merchantCategoryMemory = useMemo(() => buildMerchantCategoryMemory(transactions), [transactions])
+  const duplicateCopies = useMemo(() => findDuplicateTransactionCopies(transactions), [transactions])
 
   const loadFile = async (file: File, password?: string) => {
     setError('')
@@ -138,8 +144,49 @@ export function PaymentImport({ transactions, onClose, onImport, onCorrectDates 
     }
     setCorrectedDates(updates.length)
     setDateCorrections([])
+    setRows([])
+    setDuplicateRows([])
+    setDuplicates(0)
+    setShowDuplicatePreview(false)
     setCorrectingDates(false)
   }
+
+  const deleteDuplicates = async () => {
+    setDeletingDuplicates(true)
+    setDeleteProgress(0)
+    setError('')
+    const ids = duplicateCopies.map((item) => item.id)
+    const result = await onDeleteDuplicates(ids, setDeleteProgress)
+    if (!result.ok) {
+      setError(result.error ?? '重复账目删除失败，请稍后重试。')
+      setDeletingDuplicates(false)
+      return
+    }
+    setDeletedDuplicates(ids.length)
+    setDeletingDuplicates(false)
+  }
+
+  const duplicateCleanupPanel = duplicateCopies.length > 0 ? (
+    <div className="duplicate-cleanup-panel">
+      <div className="duplicate-cleanup-heading">
+        <span><Trash2 size={18} /></span>
+        <div><b>发现 {duplicateCopies.length} 笔完全重复的副本</b><small>每组保留创建时间最早的一笔，下面这些后来新增的副本将被删除。</small></div>
+      </div>
+      <div className="duplicate-cleanup-list">
+        {duplicateCopies.slice(0, 5).map((item) => (
+          <div key={`cleanup-${item.id}`}>
+            <span><b>{item.note || item.category}</b><small>{item.occurred_on} · {item.category}</small></span>
+            <strong>{item.type === 'income' ? '+' : '-'}{money.format(item.amount)}</strong>
+          </div>
+        ))}
+      </div>
+      <button type="button" disabled={deletingDuplicates} onClick={() => void deleteDuplicates()}>
+        {deletingDuplicates ? `正在删除 ${deleteProgress} / ${duplicateCopies.length}` : `删除 ${duplicateCopies.length} 笔重复副本`}
+      </button>
+    </div>
+  ) : deletedDuplicates !== null ? (
+    <p className="import-memory-note">已删除 {deletedDuplicates} 笔重复副本，每组均保留了最早的原记录。</p>
+  ) : null
 
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
@@ -154,12 +201,14 @@ export function PaymentImport({ transactions, onClose, onImport, onCorrectDates 
           </div>
         </header>
 
-        {imported !== null ? (
+        {imported !== null || correctedDates !== null ? (
           <div className="import-success">
             <CheckCircle2 size={42} />
-            <h3>成功导入 {imported} 笔</h3>
-            <p>重复记录已自动跳过，账本统计已经更新。</p>
-            <button className="primary-button" onClick={onClose}>查看账本</button>
+            <h3>{imported !== null ? `成功导入 ${imported} 笔` : `已修正 ${correctedDates} 笔日期`}</h3>
+            <p>{imported !== null ? '重复记录已自动跳过，账本统计已经更新。' : '日期修正已经完成，不会再显示“确认导入”。'}</p>
+            {duplicateCleanupPanel}
+            {error && <p className="inline-error">{error}</p>}
+            <button className="primary-button" onClick={onClose}>完成并返回账本</button>
           </div>
         ) : (
           <>
@@ -294,7 +343,7 @@ export function PaymentImport({ transactions, onClose, onImport, onCorrectDates 
                 </button>
               </div>
             )}
-            {correctedDates !== null && <p className="import-memory-note">已修正 {correctedDates} 笔已有账目的日期，没有新增重复记录。</p>}
+            {duplicateCleanupPanel}
 
             {error && <p className="inline-error">{error}</p>}
             <p className="import-note">文件会在当前设备中读取，原文件和压缩包密码不会上传。确认导入前不会修改任何数据。</p>

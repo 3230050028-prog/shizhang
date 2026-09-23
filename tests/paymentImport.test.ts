@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { findPaymentDateCorrections, parsePaymentStatement, spreadsheetCellToText, splitPaymentRows, transactionFingerprint } from '../src/lib/paymentImport'
+import { findDuplicateTransactionCopies, findPaymentDateCorrections, parsePaymentStatement, spreadsheetCellToText, splitPaymentRows, transactionFingerprint } from '../src/lib/paymentImport'
 import type { TransactionInput } from '../src/types'
 
 const payment: TransactionInput = {
@@ -49,6 +49,20 @@ describe('账单重复检测', () => {
     ]
 
     expect(findPaymentDateCorrections(incoming, [existing])).toEqual([])
+  })
+
+  it('清理完全重复账目时保留创建时间最早的一笔', () => {
+    const original = { ...payment, id: 'original', created_at: '2026-09-22T10:00:00Z' }
+    const laterCopy = { ...payment, id: 'copy', created_at: '2026-09-22T10:05:00Z' }
+
+    expect(findDuplicateTransactionCopies([laterCopy, original])).toEqual([laterCopy])
+  })
+
+  it('同商户同金额但日期不同的账目不会作为重复副本删除', () => {
+    const first = { ...payment, id: 'first', created_at: '2026-09-22T10:00:00Z' }
+    const nextDay = { ...payment, id: 'next', occurred_on: '2026-09-17', created_at: '2026-09-23T10:00:00Z' }
+
+    expect(findDuplicateTransactionCopies([first, nextDay])).toEqual([])
   })
 })
 

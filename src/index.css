@@ -474,6 +474,21 @@ a { color: inherit; text-decoration: none; }
 .date-correction-list strong { flex: 0 0 auto; font-size: 10px; }
 .date-correction-panel > button { min-height: 38px; color: white; border: 0; border-radius: 9px; background: #8a6d1d; font-size: 10px; font-weight: 700; }
 .date-correction-panel > button:disabled { cursor: wait; opacity: .65; }
+.duplicate-cleanup-panel { display: grid; width: 100%; gap: 10px; margin: 12px 0; padding: 12px; color: #713d36; border: 1px solid #e7c8c2; border-radius: 12px; background: #fff7f5; text-align: left; }
+.duplicate-cleanup-heading { display: flex; align-items: center; gap: 9px; }
+.duplicate-cleanup-heading > span { display: grid; flex: 0 0 auto; place-items: center; width: 34px; height: 34px; color: #9b5147; border-radius: 9px; background: #f8e2dd; }
+.duplicate-cleanup-heading b, .duplicate-cleanup-heading small { display: block; }
+.duplicate-cleanup-heading b { font-size: 11px; }
+.duplicate-cleanup-heading small { margin-top: 3px; color: #8d655f; font-size: 8px; line-height: 1.45; }
+.duplicate-cleanup-list { overflow: hidden; border: 1px solid #eed7d2; border-radius: 9px; background: white; }
+.duplicate-cleanup-list > div { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 10px; border-bottom: 1px solid #f4e5e2; }
+.duplicate-cleanup-list > div:last-child { border-bottom: 0; }
+.duplicate-cleanup-list b, .duplicate-cleanup-list small { display: block; }
+.duplicate-cleanup-list b { color: var(--ink); font-size: 10px; }
+.duplicate-cleanup-list small { margin-top: 2px; color: #92716c; font-size: 9px; }
+.duplicate-cleanup-list strong { flex: 0 0 auto; color: #82483f; font-size: 10px; }
+.duplicate-cleanup-panel > button { min-height: 38px; color: white; border: 0; border-radius: 9px; background: #a65348; font-size: 10px; font-weight: 700; }
+.duplicate-cleanup-panel > button:disabled { cursor: wait; opacity: .65; }
 .import-note { margin: 0 0 13px; color: var(--muted); font-size: 10px; line-height: 1.5; }
 .import-progress { display: grid; gap: 7px; margin: 0 0 13px; }
 .import-progress > span { height: 7px; overflow: hidden; border-radius: 99px; background: #e3eae5; }

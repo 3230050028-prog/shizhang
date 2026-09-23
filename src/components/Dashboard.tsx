@@ -59,6 +59,7 @@ interface DashboardProps {
   onAdd: (input: TransactionInput) => Promise<ActionResult>
   onAddBatch: (inputs: TransactionInput[], onProgress?: (completed: number) => void) => Promise<ActionResult>
   onCorrectDates: (transactions: Transaction[], onProgress?: (completed: number) => void) => Promise<ActionResult>
+  onDeleteDuplicates: (ids: string[], onProgress?: (completed: number) => void) => Promise<ActionResult>
   onUpdate: (id: string, input: TransactionInput) => Promise<ActionResult>
   onDelete: (id: string) => Promise<ActionResult>
   onSaveBudget: (month: string, amount: number) => Promise<ActionResult>
@@ -101,6 +102,7 @@ export function Dashboard({
   onAdd,
   onAddBatch,
   onCorrectDates,
+  onDeleteDuplicates,
   onUpdate,
   onDelete,
   onSaveBudget,
@@ -495,6 +497,7 @@ export function Dashboard({
           onClose={() => setShowImport(false)}
           onImport={onAddBatch}
           onCorrectDates={onCorrectDates}
+          onDeleteDuplicates={onDeleteDuplicates}
         />
       )}
     </div>

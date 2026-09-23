@@ -442,6 +442,46 @@ function App() {
     }
   }
 
+  const deleteDuplicateTransactions = async (
+    ids: string[],
+    onProgress?: (completed: number) => void,
+  ): Promise<ActionResult> => {
+    if (!ids.length) return { ok: true, saved: 0, failed: 0 }
+
+    if (!supabase || !session) {
+      const deleted = new Set(ids)
+      setTransactions((current) => current.filter((item) => !deleted.has(item.id)))
+      onProgress?.(ids.length)
+      return { ok: true, saved: ids.length, failed: 0 }
+    }
+
+    const cloudClient = supabase
+    try {
+      const deletedIds = await saveInBatches(ids, async (batch) => {
+        const { data, error } = await cloudClient
+          .from('transactions')
+          .delete()
+          .in('id', batch)
+          .select('id')
+        if (error) throw error
+        const savedBatch = ((data as Array<{ id: string }> | null) ?? []).map((item) => item.id)
+        const deleted = new Set(savedBatch)
+        setTransactions((current) => current.filter((item) => !deleted.has(item.id)))
+        return savedBatch
+      }, { batchSize: 50, maxAttempts: 3, onProgress })
+      return { ok: true, saved: deletedIds.length, failed: 0 }
+    } catch (error) {
+      if (error instanceof BatchSaveError) {
+        return {
+          ...failure(`已删除 ${error.savedCount} 笔重复副本，剩余 ${error.failedCount} 笔失败`, error.originalError),
+          saved: error.savedCount,
+          failed: error.failedCount,
+        }
+      }
+      return { ...failure('重复账目删除失败', error), saved: 0, failed: ids.length }
+    }
+  }
+
   const saveBudget = async (month: string, amount: number): Promise<ActionResult> => {
     const monthDate = `${month}-01`
     if (!supabase || !session) {
@@ -498,6 +538,7 @@ function App() {
       onAdd={addTransaction}
       onAddBatch={addTransactions}
       onCorrectDates={correctTransactionDates}
+      onDeleteDuplicates={deleteDuplicateTransactions}
       onUpdate={updateTransaction}
       onDelete={deleteTransaction}
       onSaveBudget={saveBudget}

@@ -148,6 +148,27 @@ export const splitPaymentRows = <T extends TransactionInput>(rows: T[], existing
   return { uniqueRows, duplicateRows }
 }
 
+export const findDuplicateTransactionCopies = (transactions: Transaction[]) => {
+  const groups = new Map<string, Transaction[]>()
+  transactions.forEach((transaction) => {
+    const fingerprint = transactionFingerprint(transaction)
+    groups.set(fingerprint, [...(groups.get(fingerprint) ?? []), transaction])
+  })
+
+  return [...groups.values()].flatMap((group) => {
+    if (group.length < 2) return []
+    return [...group]
+      .sort((left, right) => {
+        const leftTime = Date.parse(left.created_at ?? '')
+        const rightTime = Date.parse(right.created_at ?? '')
+        const safeLeft = Number.isFinite(leftTime) ? leftTime : Number.MAX_SAFE_INTEGER
+        const safeRight = Number.isFinite(rightTime) ? rightTime : Number.MAX_SAFE_INTEGER
+        return safeLeft - safeRight || left.id.localeCompare(right.id)
+      })
+      .slice(1)
+  })
+}
+
 export const parsePaymentStatement = (text: string): PaymentImportResult => {
   const sample = text.split(/\r?\n/).slice(0, 30).join('\n')
   const delimiter = (sample.match(/\t/g)?.length ?? 0) > (sample.match(/,/g)?.length ?? 0) ? '\t' : ','
