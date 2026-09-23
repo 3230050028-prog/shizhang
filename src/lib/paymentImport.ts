@@ -83,8 +83,17 @@ export const inferTransactionCategory = (value: string, type: TransactionType) =
   return '其他'
 }
 
-const findColumn = (headers: string[], candidates: string[]) =>
-  headers.findIndex((header) => candidates.some((candidate) => header.includes(candidate)))
+const findColumn = (headers: string[], candidates: string[]) => {
+  for (const candidate of candidates.map(normalizeHeader)) {
+    const exactIndex = headers.findIndex((header) => header === candidate)
+    if (exactIndex >= 0) return exactIndex
+  }
+  for (const candidate of candidates.map(normalizeHeader)) {
+    const partialIndex = headers.findIndex((header) => header.includes(candidate))
+    if (partialIndex >= 0) return partialIndex
+  }
+  return -1
+}
 
 const valueAt = (row: string[], index: number) => index >= 0 ? (row[index] ?? '').trim() : ''
 
@@ -164,15 +173,20 @@ const parseTextFile = async (file: Blob) => {
   return parsePaymentStatement(text)
 }
 
-const rowsToText = (rows: unknown[][]) => rows.map((row) => row.map((cell) => {
+export const spreadsheetCellToText = (cell: unknown) => {
   let value = ''
   if (cell instanceof Date) {
-    const date = [cell.getFullYear(), String(cell.getMonth() + 1).padStart(2, '0'), String(cell.getDate()).padStart(2, '0')].join('-')
-    const time = [cell.getHours(), cell.getMinutes(), cell.getSeconds()].map((part) => String(part).padStart(2, '0')).join(':')
+    const date = [cell.getUTCFullYear(), String(cell.getUTCMonth() + 1).padStart(2, '0'), String(cell.getUTCDate()).padStart(2, '0')].join('-')
+    const time = [cell.getUTCHours(), cell.getUTCMinutes(), cell.getUTCSeconds()].map((part) => String(part).padStart(2, '0')).join(':')
     value = `${date} ${time}`
   } else if (cell !== null && cell !== undefined) {
     value = String(cell)
   }
+  return value
+}
+
+const rowsToText = (rows: unknown[][]) => rows.map((row) => row.map((cell) => {
+  const value = spreadsheetCellToText(cell)
   return `"${value.replaceAll('"', '""')}"`
 }).join('\t')).join('\n')
 

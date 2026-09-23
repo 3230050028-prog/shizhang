@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { transactionFingerprint } from '../src/lib/paymentImport'
+import { parsePaymentStatement, spreadsheetCellToText, transactionFingerprint } from '../src/lib/paymentImport'
 import type { TransactionInput } from '../src/types'
 
 const payment: TransactionInput = {
@@ -22,5 +22,25 @@ describe('账单重复检测', () => {
     const nextDay = { ...payment, occurred_on: '2026-09-17' }
 
     expect(transactionFingerprint(nextDay)).not.toBe(transactionFingerprint(payment))
+  })
+})
+
+describe('账单日期', () => {
+  it('同时存在多个时间列时优先使用准确的交易时间', () => {
+    const statement = [
+      '创建时间,交易时间,收/支,金额,交易对方,商品说明,支付方式',
+      '2026-09-20 12:13:00,2026-09-22 12:13:00,支出,3.50,华南师范大学,SIOS|45|41,零钱通',
+    ].join('\n')
+
+    const result = parsePaymentStatement(statement)
+
+    expect(result.rows).toHaveLength(1)
+    expect(result.rows[0].occurred_on).toBe('2026-09-22')
+  })
+
+  it('Excel 日期使用表格原始时区，不把晚间交易推到第二天', () => {
+    const excelDate = new Date(Date.UTC(2026, 8, 22, 21, 15, 0))
+
+    expect(spreadsheetCellToText(excelDate)).toBe('2026-09-22 21:15:00')
   })
 })
