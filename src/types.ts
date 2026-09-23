@@ -51,4 +51,5 @@ export interface ActionResult {
   error?: string
   saved?: number
   failed?: number
+  ids?: string[]
 }

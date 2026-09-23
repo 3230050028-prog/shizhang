@@ -12,10 +12,12 @@ import {
   Search,
   Smartphone,
   CalendarClock,
+  History,
   Upload,
   X,
 } from 'lucide-react'
 import { findDuplicateTransactionCopies, findPaymentDateCorrections, readPaymentStatement, splitPaymentRows, transactionFingerprint, ZipPasswordRequiredError, type ParsedPaymentRow, type PaymentDateCorrection } from '../lib/paymentImport'
+import { clearLastImportBatch, readLastImportBatch, saveLastImportBatch, type LastImportBatch } from '../lib/importHistory'
 import { applyRememberedCategory, buildMerchantCategoryMemory } from '../lib/merchantCategory'
 import type { ActionResult, Transaction, TransactionInput } from '../types'
 
@@ -50,6 +52,10 @@ export function PaymentImport({ transactions, onClose, onImport, onCorrectDates,
   const [deletingDuplicates, setDeletingDuplicates] = useState(false)
   const [deleteProgress, setDeleteProgress] = useState(0)
   const [deletedDuplicates, setDeletedDuplicates] = useState<number | null>(null)
+  const [lastImport, setLastImport] = useState<LastImportBatch | null>(() => readLastImportBatch())
+  const [undoingImport, setUndoingImport] = useState(false)
+  const [undoProgress, setUndoProgress] = useState(0)
+  const [undoneImport, setUndoneImport] = useState<number | null>(null)
   const [showGuide, setShowGuide] = useState(true)
   const [showDuplicatePreview, setShowDuplicatePreview] = useState(false)
   const existing = useMemo(
@@ -58,6 +64,11 @@ export function PaymentImport({ transactions, onClose, onImport, onCorrectDates,
   )
   const merchantCategoryMemory = useMemo(() => buildMerchantCategoryMemory(transactions), [transactions])
   const duplicateCopies = useMemo(() => findDuplicateTransactionCopies(transactions), [transactions])
+  const lastImportIds = useMemo(() => {
+    if (!lastImport) return []
+    const existingIds = new Set(transactions.map((item) => item.id))
+    return lastImport.ids.filter((id) => existingIds.has(id))
+  }, [lastImport, transactions])
 
   const loadFile = async (file: File, password?: string) => {
     setError('')
@@ -127,8 +138,34 @@ export function PaymentImport({ transactions, onClose, onImport, onCorrectDates,
       setImporting(false)
       return
     }
-    setImported(inputs.length)
+    const savedIds = result.ids ?? []
+    if (savedIds.length) {
+      const batch = { ids: savedIds, fileName: fileName || '支付账单', importedAt: new Date().toISOString() }
+      saveLastImportBatch(batch)
+      setLastImport(batch)
+      setUndoneImport(null)
+    }
+    setImported(result.saved ?? inputs.length)
     setImporting(false)
+  }
+
+  const undoLastImport = async () => {
+    if (!lastImportIds.length) return
+    if (!window.confirm(`确定撤销上次导入的 ${lastImportIds.length} 笔记录吗？撤销后这些记录将从账本中删除。`)) return
+    setUndoingImport(true)
+    setUndoProgress(0)
+    setError('')
+    const result = await onDeleteDuplicates(lastImportIds, setUndoProgress)
+    if (!result.ok) {
+      setError(result.error ?? '撤销上次导入失败，请稍后重试。')
+      setUndoingImport(false)
+      return
+    }
+    clearLastImportBatch()
+    setLastImport(null)
+    setUndoneImport(lastImportIds.length)
+    setImported(null)
+    setUndoingImport(false)
   }
 
   const correctDates = async () => {
@@ -193,6 +230,21 @@ export function PaymentImport({ transactions, onClose, onImport, onCorrectDates,
     </div>
   )
 
+  const lastImportPanel = lastImport && lastImportIds.length > 0 ? (
+    <div className="last-import-panel">
+      <span><History size={18} /></span>
+      <div>
+        <b>上次导入：{lastImport.fileName}</b>
+        <small>{new Date(lastImport.importedAt).toLocaleString('zh-CN')} · 共 {lastImportIds.length} 笔</small>
+      </div>
+      <button type="button" disabled={undoingImport} onClick={() => void undoLastImport()}>
+        {undoingImport ? `正在撤销 ${undoProgress} / ${lastImportIds.length}` : '撤销上次导入'}
+      </button>
+    </div>
+  ) : undoneImport !== null ? (
+    <p className="import-memory-note">已撤销上次导入，共删除 {undoneImport} 笔记录。</p>
+  ) : null
+
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
       <section className="transaction-modal import-modal" role="dialog" aria-modal="true" aria-labelledby="import-title" onMouseDown={(event) => event.stopPropagation()}>
@@ -206,6 +258,7 @@ export function PaymentImport({ transactions, onClose, onImport, onCorrectDates,
           </div>
         </header>
 
+        {lastImportPanel}
         {imported === null && correctedDates === null && duplicateCleanupPanel}
 
         {imported !== null || correctedDates !== null ? (

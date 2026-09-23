@@ -322,7 +322,7 @@ function App() {
       setTransactions((current) => [...created, ...current])
       void persistImportMetadata(inputs)
       onProgress?.(inputs.length)
-      return { ok: true, saved: inputs.length, failed: 0 }
+      return { ok: true, saved: inputs.length, failed: 0, ids: created.map((item) => item.id) }
     }
 
     const cloudClient = supabase
@@ -345,7 +345,7 @@ function App() {
       }, { batchSize: 20, maxAttempts: 3, onProgress })
 
       void persistImportMetadata(inputs)
-      return { ok: true, saved: saved.length, failed: 0 }
+      return { ok: true, saved: saved.length, failed: 0, ids: saved.map((item) => item.id) }
     } catch (error) {
       if (error instanceof BatchSaveError) {
         const prefix = error.retryable
