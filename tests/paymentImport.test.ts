@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parsePaymentStatement, spreadsheetCellToText, transactionFingerprint } from '../src/lib/paymentImport'
+import { parsePaymentStatement, spreadsheetCellToText, splitPaymentRows, transactionFingerprint } from '../src/lib/paymentImport'
 import type { TransactionInput } from '../src/types'
 
 const payment: TransactionInput = {
@@ -22,6 +22,14 @@ describe('账单重复检测', () => {
     const nextDay = { ...payment, occurred_on: '2026-09-17' }
 
     expect(transactionFingerprint(nextDay)).not.toBe(transactionFingerprint(payment))
+  })
+
+  it('重复账目保留在单独的预览列表中', () => {
+    const newPayment = { ...payment, occurred_on: '2026-09-17' }
+    const result = splitPaymentRows([payment, newPayment], [transactionFingerprint(payment)])
+
+    expect(result.uniqueRows).toEqual([newPayment])
+    expect(result.duplicateRows).toEqual([payment])
   })
 })
 

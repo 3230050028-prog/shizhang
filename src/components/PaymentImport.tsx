@@ -13,7 +13,7 @@ import {
   Upload,
   X,
 } from 'lucide-react'
-import { readPaymentStatement, transactionFingerprint, ZipPasswordRequiredError, type ParsedPaymentRow } from '../lib/paymentImport'
+import { readPaymentStatement, splitPaymentRows, transactionFingerprint, ZipPasswordRequiredError, type ParsedPaymentRow } from '../lib/paymentImport'
 import { applyRememberedCategory, buildMerchantCategoryMemory } from '../lib/merchantCategory'
 import type { ActionResult, Transaction, TransactionInput } from '../types'
 
@@ -31,6 +31,7 @@ export function PaymentImport({ transactions, onClose, onImport }: PaymentImport
   const [zipPassword, setZipPassword] = useState('')
   const [needsPassword, setNeedsPassword] = useState(false)
   const [rows, setRows] = useState<ParsedPaymentRow[]>([])
+  const [duplicateRows, setDuplicateRows] = useState<ParsedPaymentRow[]>([])
   const [skipped, setSkipped] = useState(0)
   const [duplicates, setDuplicates] = useState(0)
   const [remembered, setRemembered] = useState(0)
@@ -39,6 +40,7 @@ export function PaymentImport({ transactions, onClose, onImport }: PaymentImport
   const [importProgress, setImportProgress] = useState(0)
   const [imported, setImported] = useState<number | null>(null)
   const [showGuide, setShowGuide] = useState(true)
+  const [showDuplicatePreview, setShowDuplicatePreview] = useState(false)
   const existing = useMemo(
     () => new Set(transactions.map(transactionFingerprint)),
     [transactions],
@@ -52,27 +54,21 @@ export function PaymentImport({ transactions, onClose, onImport }: PaymentImport
       const result = await readPaymentStatement(file, password)
       const rememberedRows = result.rows.map((row) => applyRememberedCategory(row, merchantCategoryMemory))
       setRemembered(rememberedRows.filter((row, index) => row.category !== result.rows[index].category).length)
-      const seen = new Set(existing)
-      let duplicateCount = 0
-      const uniqueRows = rememberedRows.filter((row) => {
-        const fingerprint = transactionFingerprint(row)
-        if (seen.has(fingerprint)) {
-          duplicateCount += 1
-          return false
-        }
-        seen.add(fingerprint)
-        return true
-      })
+      const { uniqueRows, duplicateRows: foundDuplicates } = splitPaymentRows(rememberedRows, existing)
       setRows(uniqueRows.slice(0, 500))
+      setDuplicateRows(foundDuplicates.slice(0, 500))
       setSkipped(result.skipped + Math.max(0, uniqueRows.length - 500))
-      setDuplicates(duplicateCount)
+      setDuplicates(foundDuplicates.length)
+      setShowDuplicatePreview(!uniqueRows.length && foundDuplicates.length > 0)
       setNeedsPassword(false)
-      if (!uniqueRows.length) setError('没有发现可导入的新记录，可能都已经导入过了。')
+      if (!uniqueRows.length && !foundDuplicates.length) setError('没有发现可导入的新记录。')
     } catch (reason) {
       setRows([])
+      setDuplicateRows([])
       setSkipped(0)
       setDuplicates(0)
       setRemembered(0)
+      setShowDuplicatePreview(false)
       if (reason instanceof ZipPasswordRequiredError) {
         setNeedsPassword(true)
       } else {
@@ -217,7 +213,9 @@ export function PaymentImport({ transactions, onClose, onImport }: PaymentImport
             {(rows.length > 0 || skipped > 0 || duplicates > 0) && (
               <div className="import-summary">
                 <span><b>{rows.length}</b> 笔待导入</span>
-                <span><b>{duplicates}</b> 笔重复</span>
+                <button type="button" disabled={!duplicates} onClick={() => setShowDuplicatePreview((visible) => !visible)} aria-expanded={showDuplicatePreview}>
+                  <b>{duplicates}</b> 笔重复<small>{duplicates ? (showDuplicatePreview ? '收起' : '查看') : ''}</small>
+                </button>
                 <span><b>{skipped}</b> 行已忽略</span>
               </div>
             )}
@@ -228,6 +226,18 @@ export function PaymentImport({ transactions, onClose, onImport }: PaymentImport
                 <p>预览前 {Math.min(rows.length, 5)} 笔</p>
                 {rows.slice(0, 5).map((row) => (
                   <div key={`${row.sourceLine}-${transactionFingerprint(row)}`}>
+                    <span><b>{row.note || row.category}</b><small>{row.occurred_on} · {row.category} · {row.account}</small></span>
+                    <strong className={row.type}>{row.type === 'income' ? '+' : '-'}{money.format(row.amount)}</strong>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {showDuplicatePreview && duplicateRows.length > 0 && (
+              <div className="import-preview duplicate-preview">
+                <p>重复记录预览前 {Math.min(duplicateRows.length, 5)} 笔（不会再次导入）</p>
+                {duplicateRows.slice(0, 5).map((row) => (
+                  <div key={`duplicate-${row.sourceLine}-${transactionFingerprint(row)}`}>
                     <span><b>{row.note || row.category}</b><small>{row.occurred_on} · {row.category} · {row.account}</small></span>
                     <strong className={row.type}>{row.type === 'income' ? '+' : '-'}{money.format(row.amount)}</strong>
                   </div>

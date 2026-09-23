@@ -103,6 +103,24 @@ export const transactionFingerprint = (row: TransactionInput) => {
   return [row.occurred_on, row.type, Number(row.amount).toFixed(2), merchant].join('|')
 }
 
+export const splitPaymentRows = <T extends TransactionInput>(rows: T[], existingFingerprints: Iterable<string>) => {
+  const seen = new Set(existingFingerprints)
+  const uniqueRows: T[] = []
+  const duplicateRows: T[] = []
+
+  rows.forEach((row) => {
+    const fingerprint = transactionFingerprint(row)
+    if (seen.has(fingerprint)) {
+      duplicateRows.push(row)
+      return
+    }
+    seen.add(fingerprint)
+    uniqueRows.push(row)
+  })
+
+  return { uniqueRows, duplicateRows }
+}
+
 export const parsePaymentStatement = (text: string): PaymentImportResult => {
   const sample = text.split(/\r?\n/).slice(0, 30).join('\n')
   const delimiter = (sample.match(/\t/g)?.length ?? 0) > (sample.match(/,/g)?.length ?? 0) ? '\t' : ','

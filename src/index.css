@@ -440,7 +440,10 @@ a { color: inherit; text-decoration: none; }
 .file-drop span { color: var(--muted); font-size: 11px; font-weight: 400; }
 .file-drop input { position: absolute; width: 1px; height: 1px; padding: 0; opacity: 0; pointer-events: none; }
 .import-summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 14px 0; }
-.import-summary span { padding: 10px; color: var(--muted); border: 1px solid var(--line); border-radius: 10px; background: #fafbf9; text-align: center; font-size: 10px; }
+.import-summary > span, .import-summary > button { padding: 10px; color: var(--muted); border: 1px solid var(--line); border-radius: 10px; background: #fafbf9; text-align: center; font: inherit; font-size: 10px; }
+.import-summary > button:not(:disabled) { cursor: pointer; }
+.import-summary > button:not(:disabled):hover { border-color: #a9c3b0; background: var(--green-50); }
+.import-summary > button small { display: block; min-height: 12px; margin-top: 2px; color: var(--green-700); font-size: 8px; }
 .import-summary b { display: block; margin-bottom: 2px; color: var(--ink); font-size: 17px; }
 .import-memory-note { margin: -4px 0 12px; padding: 8px 10px; color: #35624a; border-radius: 8px; background: #eef7f1; font-size: 9px; line-height: 1.5; }
 .import-preview { margin-bottom: 14px; overflow: hidden; border: 1px solid var(--line); border-radius: 12px; }
@@ -454,6 +457,8 @@ a { color: inherit; text-decoration: none; }
 .import-preview strong { flex: 0 0 auto; font-size: 11px; }
 .import-preview strong.income { color: #31825b; }
 .import-preview strong.expense { color: #34443b; }
+.duplicate-preview { border-color: #dfd2aa; }
+.duplicate-preview > p { color: #756126; background: #fff9e8; }
 .import-note { margin: 0 0 13px; color: var(--muted); font-size: 10px; line-height: 1.5; }
 .import-progress { display: grid; gap: 7px; margin: 0 0 13px; }
 .import-progress > span { height: 7px; overflow: hidden; border-radius: 99px; background: #e3eae5; }
