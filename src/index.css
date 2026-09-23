@@ -185,6 +185,11 @@ a { color: inherit; text-decoration: none; }
 .toolbar-actions { display: flex; gap: 9px; }
 .duplicate-cleanup-shortcut { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 42px; padding: 0 14px; color: #9b443a; border: 1px solid #e1b9b2; border-radius: 12px; background: #fff2ef; font-size: 11px; font-weight: 700; }
 .duplicate-cleanup-shortcut:hover { border-color: #c98075; background: #fee6e1; }
+.duplicate-cleanup-empty { display: flex; align-items: flex-start; gap: 10px; margin: 0 0 16px; padding: 13px 14px; color: #6f655e; border: 1px solid #e7ddd7; border-radius: 14px; background: #faf8f5; }
+.duplicate-cleanup-empty svg { flex: 0 0 auto; margin-top: 1px; color: #9b7469; }
+.duplicate-cleanup-empty div { display: grid; gap: 3px; }
+.duplicate-cleanup-empty b { color: #403a36; font-size: 13px; }
+.duplicate-cleanup-empty small { line-height: 1.55; }
 .error-banner { display: flex; align-items: center; gap: 10px; max-width: 1260px; margin: 0 auto 16px; padding: 11px 13px; color: #914b39; border: 1px solid #f0c9bd; border-radius: 11px; background: #fff3ee; font-size: 12px; }
 .error-banner span { flex: 1; }
 .error-banner button { padding: 5px 8px; color: #914b39; border: 0; border-radius: 7px; background: rgba(255,255,255,.7); font-size: 11px; font-weight: 700; }

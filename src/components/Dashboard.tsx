@@ -334,11 +334,9 @@ export function Dashboard({
             <span>{displayMonth}<ChevronDown size={16} /></span>
           </label>
           <div className="toolbar-actions">
-            {duplicateCopyCount > 0 && (
-              <button className="duplicate-cleanup-shortcut" onClick={() => setShowImport(true)}>
-                <Trash2 size={17} />清理重复 {duplicateCopyCount} 笔
-              </button>
-            )}
+            <button className="duplicate-cleanup-shortcut" onClick={() => setShowImport(true)}>
+              <Trash2 size={17} />{duplicateCopyCount > 0 ? `清理重复 ${duplicateCopyCount} 笔` : '检查重复'}
+            </button>
             <button className="secondary-button" onClick={() => setShowImport(true)}><Upload size={17} />导入账单</button>
             <button className="secondary-button" onClick={exportCsv}><Download size={17} />导出本月</button>
           </div>

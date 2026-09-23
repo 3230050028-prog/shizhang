@@ -186,7 +186,12 @@ export function PaymentImport({ transactions, onClose, onImport, onCorrectDates,
     </div>
   ) : deletedDuplicates !== null ? (
     <p className="import-memory-note">已删除 {deletedDuplicates} 笔重复副本，每组均保留了最早的原记录。</p>
-  ) : null
+  ) : (
+    <div className="duplicate-cleanup-empty">
+      <Trash2 size={18} />
+      <div><b>暂未发现完全相同的重复账目</b><small>你仍可在下方重新选择原账单，系统会核对并跳过已经存在的记录。</small></div>
+    </div>
+  )
 
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
