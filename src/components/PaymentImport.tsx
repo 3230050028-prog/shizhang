@@ -17,7 +17,8 @@ import {
   X,
 } from 'lucide-react'
 import { findDuplicateTransactionCopies, findPaymentDateCorrections, readPaymentStatement, splitPaymentRows, transactionFingerprint, ZipPasswordRequiredError, type ParsedPaymentRow, type PaymentDateCorrection } from '../lib/paymentImport'
-import { clearLastImportBatch, readLastImportBatch, saveLastImportBatch, type LastImportBatch } from '../lib/importHistory'
+import { readImportHistory, removeImportBatch, saveImportBatch, type ImportBatch } from '../lib/importHistory'
+import { buildImportReconciliation, totalAmounts } from '../lib/importReconciliation'
 import { applyRememberedCategory, buildMerchantCategoryMemory } from '../lib/merchantCategory'
 import type { ActionResult, Transaction, TransactionInput } from '../types'
 
@@ -37,6 +38,7 @@ export function PaymentImport({ transactions, onClose, onImport, onCorrectDates,
   const [zipPassword, setZipPassword] = useState('')
   const [needsPassword, setNeedsPassword] = useState(false)
   const [rows, setRows] = useState<ParsedPaymentRow[]>([])
+  const [sourceRows, setSourceRows] = useState<ParsedPaymentRow[]>([])
   const [duplicateRows, setDuplicateRows] = useState<ParsedPaymentRow[]>([])
   const [dateCorrections, setDateCorrections] = useState<PaymentDateCorrection<ParsedPaymentRow>[]>([])
   const [skipped, setSkipped] = useState(0)
@@ -52,8 +54,8 @@ export function PaymentImport({ transactions, onClose, onImport, onCorrectDates,
   const [deletingDuplicates, setDeletingDuplicates] = useState(false)
   const [deleteProgress, setDeleteProgress] = useState(0)
   const [deletedDuplicates, setDeletedDuplicates] = useState<number | null>(null)
-  const [lastImport, setLastImport] = useState<LastImportBatch | null>(() => readLastImportBatch())
-  const [undoingImport, setUndoingImport] = useState(false)
+  const [importHistory, setImportHistory] = useState<ImportBatch[]>(() => readImportHistory())
+  const [undoingBatch, setUndoingBatch] = useState('')
   const [undoProgress, setUndoProgress] = useState(0)
   const [undoneImport, setUndoneImport] = useState<number | null>(null)
   const [showGuide, setShowGuide] = useState(true)
@@ -64,17 +66,28 @@ export function PaymentImport({ transactions, onClose, onImport, onCorrectDates,
   )
   const merchantCategoryMemory = useMemo(() => buildMerchantCategoryMemory(transactions), [transactions])
   const duplicateCopies = useMemo(() => findDuplicateTransactionCopies(transactions), [transactions])
-  const lastImportIds = useMemo(() => {
-    if (!lastImport) return []
+  const activeImportHistory = useMemo(() => {
     const existingIds = new Set(transactions.map((item) => item.id))
-    return lastImport.ids.filter((id) => existingIds.has(id))
-  }, [lastImport, transactions])
+    return importHistory
+      .map((batch) => ({ batch, ids: batch.ids.filter((id) => existingIds.has(id)) }))
+      .filter(({ ids }) => ids.length > 0)
+  }, [importHistory, transactions])
+  const reconciliation = useMemo(
+    () => buildImportReconciliation(
+      sourceRows,
+      rows,
+      duplicateRows,
+      dateCorrections.map(({ incoming }) => incoming),
+    ),
+    [dateCorrections, duplicateRows, rows, sourceRows],
+  )
 
   const loadFile = async (file: File, password?: string) => {
     setError('')
     setImported(null)
     try {
       const result = await readPaymentStatement(file, password)
+      setSourceRows(result.rows)
       const rememberedRows = result.rows.map((row) => applyRememberedCategory(row, merchantCategoryMemory))
       setRemembered(rememberedRows.filter((row, index) => row.category !== result.rows[index].category).length)
       const corrections = findPaymentDateCorrections(rememberedRows, transactions)
@@ -93,6 +106,7 @@ export function PaymentImport({ transactions, onClose, onImport, onCorrectDates,
       setNeedsPassword(false)
       if (!uniqueRows.length && !foundDuplicates.length) setError('没有发现可导入的新记录。')
     } catch (reason) {
+      setSourceRows([])
       setRows([])
       setDuplicateRows([])
       setDateCorrections([])
@@ -140,32 +154,37 @@ export function PaymentImport({ transactions, onClose, onImport, onCorrectDates,
     }
     const savedIds = result.ids ?? []
     if (savedIds.length) {
-      const batch = { ids: savedIds, fileName: fileName || '支付账单', importedAt: new Date().toISOString() }
-      saveLastImportBatch(batch)
-      setLastImport(batch)
+      const totals = totalAmounts(inputs)
+      const batch = {
+        ids: savedIds,
+        fileName: fileName || '支付账单',
+        importedAt: new Date().toISOString(),
+        expenseAmount: totals.expense,
+        incomeAmount: totals.income,
+      }
+      setImportHistory(saveImportBatch(batch))
       setUndoneImport(null)
     }
     setImported(result.saved ?? inputs.length)
     setImporting(false)
   }
 
-  const undoLastImport = async () => {
-    if (!lastImportIds.length) return
-    if (!window.confirm(`确定撤销上次导入的 ${lastImportIds.length} 笔记录吗？撤销后这些记录将从账本中删除。`)) return
-    setUndoingImport(true)
+  const undoImportBatch = async (batch: ImportBatch, ids: string[]) => {
+    if (!ids.length || undoingBatch) return
+    if (!window.confirm(`确定撤销 ${new Date(batch.importedAt).toLocaleString('zh-CN')} 导入的 ${ids.length} 笔记录吗？只会删除这个批次保存的账目。`)) return
+    setUndoingBatch(batch.importedAt)
     setUndoProgress(0)
     setError('')
-    const result = await onDeleteDuplicates(lastImportIds, setUndoProgress)
+    const result = await onDeleteDuplicates(ids, setUndoProgress)
     if (!result.ok) {
-      setError(result.error ?? '撤销上次导入失败，请稍后重试。')
-      setUndoingImport(false)
+      setError(result.error ?? '撤销这次导入失败，请稍后重试。')
+      setUndoingBatch('')
       return
     }
-    clearLastImportBatch()
-    setLastImport(null)
-    setUndoneImport(lastImportIds.length)
+    setImportHistory(removeImportBatch(batch.importedAt))
+    setUndoneImport(ids.length)
     setImported(null)
-    setUndoingImport(false)
+    setUndoingBatch('')
   }
 
   const correctDates = async () => {
@@ -230,19 +249,29 @@ export function PaymentImport({ transactions, onClose, onImport, onCorrectDates,
     </div>
   )
 
-  const lastImportPanel = lastImport && lastImportIds.length > 0 ? (
-    <div className="last-import-panel">
-      <span><History size={18} /></span>
-      <div>
-        <b>上次导入：{lastImport.fileName}</b>
-        <small>{new Date(lastImport.importedAt).toLocaleString('zh-CN')} · 共 {lastImportIds.length} 笔</small>
+  const importHistoryPanel = activeImportHistory.length > 0 ? (
+    <section className="import-history-panel">
+      <header><History size={18} /><div><b>最近导入历史</b><small>仅保存在本设备，最多显示10次；撤销只删除所选批次。</small></div></header>
+      <div className="import-history-list">
+        {activeImportHistory.map(({ batch, ids }) => (
+          <article key={batch.importedAt}>
+            <div>
+              <b>{batch.fileName}</b>
+              <small>
+                {new Date(batch.importedAt).toLocaleString('zh-CN')} · {ids.length} 笔
+                {typeof batch.expenseAmount === 'number' ? ` · 支出 ${money.format(batch.expenseAmount)}` : ''}
+                {typeof batch.incomeAmount === 'number' && batch.incomeAmount > 0 ? ` · 收入 ${money.format(batch.incomeAmount)}` : ''}
+              </small>
+            </div>
+            <button type="button" disabled={Boolean(undoingBatch)} onClick={() => void undoImportBatch(batch, ids)}>
+              {undoingBatch === batch.importedAt ? `撤销中 ${undoProgress}/${ids.length}` : '撤销这次'}
+            </button>
+          </article>
+        ))}
       </div>
-      <button type="button" disabled={undoingImport} onClick={() => void undoLastImport()}>
-        {undoingImport ? `正在撤销 ${undoProgress} / ${lastImportIds.length}` : '撤销上次导入'}
-      </button>
-    </div>
+    </section>
   ) : undoneImport !== null ? (
-    <p className="import-memory-note">已撤销上次导入，共删除 {undoneImport} 笔记录。</p>
+    <p className="import-memory-note">已撤销所选导入批次，共删除 {undoneImport} 笔记录。</p>
   ) : null
 
   return (
@@ -258,7 +287,7 @@ export function PaymentImport({ transactions, onClose, onImport, onCorrectDates,
           </div>
         </header>
 
-        {lastImportPanel}
+        {importHistoryPanel}
         {imported === null && correctedDates === null && duplicateCleanupPanel}
 
         {imported !== null || correctedDates !== null ? (
@@ -357,6 +386,24 @@ export function PaymentImport({ transactions, onClose, onImport, onCorrectDates,
                 </button>
                 <span><b>{skipped}</b> 行已忽略</span>
               </div>
+            )}
+            {sourceRows.length > 0 && (
+              <section className={`amount-reconciliation ${reconciliation.balanced ? 'is-balanced' : 'has-difference'}`}>
+                <header>
+                  <span><FileCheck2 size={18} /></span>
+                  <div>
+                    <b>金额核对{reconciliation.balanced ? '一致' : '有差异'}</b>
+                    <small>收入和支出分别计算，避免净额互相抵消。</small>
+                  </div>
+                </header>
+                <div className="amount-reconciliation-grid">
+                  <span><b>账单有效金额</b><small>支出 {money.format(reconciliation.source.expense)} · 收入 {money.format(reconciliation.source.income)}</small></span>
+                  <span><b>本次待导入</b><small>支出 {money.format(reconciliation.pending.expense)} · 收入 {money.format(reconciliation.pending.income)}</small></span>
+                  <span><b>已存在或修正</b><small>支出 {money.format(reconciliation.duplicate.expense + reconciliation.corrected.expense)} · 收入 {money.format(reconciliation.duplicate.income + reconciliation.corrected.income)}</small></span>
+                  <span><b>本批未覆盖</b><small>支出 {money.format(reconciliation.difference.expense)} · 收入 {money.format(reconciliation.difference.income)}</small></span>
+                </div>
+                {!reconciliation.balanced && <p>文件记录超过单批上限或仍有记录未归入本次处理；完成当前批次后重新选择原文件继续核对。</p>}
+              </section>
             )}
             {remembered > 0 && <p className="import-memory-note">已根据你的历史账目自动归类 {remembered} 笔，导入前仍可查看预览。</p>}
 
