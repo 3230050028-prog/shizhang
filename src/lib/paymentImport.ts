@@ -98,15 +98,17 @@ const findColumn = (headers: string[], candidates: string[]) => {
 const valueAt = (row: string[], index: number) => index >= 0 ? (row[index] ?? '').trim() : ''
 
 export const transactionFingerprint = (row: TransactionInput) => {
+  const account = row.account.trim().replace(/\s+/g, '').toLocaleLowerCase('zh-CN')
   const merchant = row.note.trim().replace(/\s+/g, '').toLocaleLowerCase('zh-CN')
-    || `${row.category.trim()}|${row.account.trim()}`
-  return [row.occurred_on, row.type, Number(row.amount).toFixed(2), merchant].join('|')
+    || row.category.trim().replace(/\s+/g, '').toLocaleLowerCase('zh-CN')
+  return [row.occurred_on, row.type, Number(row.amount).toFixed(2), account, merchant].join('|')
 }
 
 const transactionMatchKey = (row: TransactionInput) => {
+  const account = row.account.trim().replace(/\s+/g, '').toLocaleLowerCase('zh-CN')
   const merchant = row.note.trim().replace(/\s+/g, '').toLocaleLowerCase('zh-CN')
-    || `${row.category.trim()}|${row.account.trim()}`
-  return [row.type, Number(row.amount).toFixed(2), merchant].join('|')
+    || row.category.trim().replace(/\s+/g, '').toLocaleLowerCase('zh-CN')
+  return [row.type, Number(row.amount).toFixed(2), account, merchant].join('|')
 }
 
 export interface PaymentDateCorrection<TIncoming extends TransactionInput = TransactionInput> {

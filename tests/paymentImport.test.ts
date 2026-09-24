@@ -64,6 +64,14 @@ describe('账单重复检测', () => {
 
     expect(findDuplicateTransactionCopies([first, nextDay])).toEqual([])
   })
+
+  it('同日同商户同金额但付款账户不同的账目不会作为重复副本删除', () => {
+    const balance = { ...payment, id: 'balance', account: '零钱', created_at: '2026-09-22T10:00:00Z' }
+    const balancePlus = { ...payment, id: 'balance-plus', account: '零钱通', created_at: '2026-09-22T10:05:00Z' }
+
+    expect(transactionFingerprint(balance)).not.toBe(transactionFingerprint(balancePlus))
+    expect(findDuplicateTransactionCopies([balance, balancePlus])).toEqual([])
+  })
 })
 
 describe('账单日期', () => {
