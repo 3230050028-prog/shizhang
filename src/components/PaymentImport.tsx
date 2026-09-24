@@ -20,19 +20,22 @@ import { findDuplicateTransactionCopies, findPaymentDateCorrections, readPayment
 import { readImportHistory, removeImportBatch, saveImportBatch, type ImportBatch } from '../lib/importHistory'
 import { buildImportReconciliation, totalAmounts } from '../lib/importReconciliation'
 import { applyRememberedCategory, buildMerchantCategoryMemory } from '../lib/merchantCategory'
+import { escapeCsv } from '../lib/csv'
+import { buildStatementRebuildPlan } from '../lib/statementRebuild'
 import type { ActionResult, Transaction, TransactionInput } from '../types'
 
 interface PaymentImportProps {
   transactions: Transaction[]
   onClose: () => void
   onImport: (rows: TransactionInput[], onProgress?: (completed: number) => void) => Promise<ActionResult>
+  onReplaceFromStatement: (targets: Transaction[], rows: TransactionInput[], onProgress?: (completed: number) => void) => Promise<ActionResult>
   onCorrectDates: (rows: Transaction[], onProgress?: (completed: number) => void) => Promise<ActionResult>
   onDeleteDuplicates: (ids: string[], onProgress?: (completed: number) => void) => Promise<ActionResult>
 }
 
 const money = new Intl.NumberFormat('zh-CN', { style: 'currency', currency: 'CNY' })
 
-export function PaymentImport({ transactions, onClose, onImport, onCorrectDates, onDeleteDuplicates }: PaymentImportProps) {
+export function PaymentImport({ transactions, onClose, onImport, onReplaceFromStatement, onCorrectDates, onDeleteDuplicates }: PaymentImportProps) {
   const [fileName, setFileName] = useState('')
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [zipPassword, setZipPassword] = useState('')
@@ -48,6 +51,8 @@ export function PaymentImport({ transactions, onClose, onImport, onCorrectDates,
   const [importing, setImporting] = useState(false)
   const [importProgress, setImportProgress] = useState(0)
   const [imported, setImported] = useState<number | null>(null)
+  const [rebuilding, setRebuilding] = useState(false)
+  const [rebuildProgress, setRebuildProgress] = useState(0)
   const [correctingDates, setCorrectingDates] = useState(false)
   const [correctionProgress, setCorrectionProgress] = useState(0)
   const [correctedDates, setCorrectedDates] = useState<number | null>(null)
@@ -80,6 +85,10 @@ export function PaymentImport({ transactions, onClose, onImport, onCorrectDates,
       dateCorrections.map(({ incoming }) => incoming),
     ),
     [dateCorrections, duplicateRows, rows, sourceRows],
+  )
+  const rebuildPlan = useMemo(
+    () => buildStatementRebuildPlan(sourceRows, transactions),
+    [sourceRows, transactions],
   )
 
   const loadFile = async (file: File, password?: string) => {
@@ -167,6 +176,62 @@ export function PaymentImport({ transactions, onClose, onImport, onCorrectDates,
     }
     setImported(result.saved ?? inputs.length)
     setImporting(false)
+  }
+
+  const downloadRebuildBackup = (targets: Transaction[], startDate: string, endDate: string) => {
+    const csvRows = [
+      ['记录编号', '日期', '类型', '分类', '支付账户', '金额', '备注'],
+      ...targets.map((item) => [
+        item.id,
+        item.occurred_on,
+        item.type === 'income' ? '收入' : '支出',
+        item.category,
+        item.account,
+        item.amount,
+        item.note,
+      ]),
+    ]
+    const csv = `\ufeff${csvRows.map((row) => row.map(escapeCsv).join(',')).join('\n')}`
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = `拾账-微信重建前备份-${startDate}-${endDate}.csv`
+    anchor.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const rebuildFromStatement = async () => {
+    if (!rebuildPlan || rebuilding) return
+    const confirmed = window.confirm(
+      `将重建 ${rebuildPlan.startDate} 至 ${rebuildPlan.endDate} 的微信相关记录：先备份并移除 ${rebuildPlan.targets.length} 笔旧记录，再写入原账单 ${rebuildPlan.replacements.length} 笔。银行卡、支付宝及日期范围外记录不会删除。确定继续吗？`,
+    )
+    if (!confirmed) return
+
+    downloadRebuildBackup(rebuildPlan.targets, rebuildPlan.startDate, rebuildPlan.endDate)
+    setRebuilding(true)
+    setRebuildProgress(0)
+    setError('')
+    const result = await onReplaceFromStatement(rebuildPlan.targets, rebuildPlan.replacements, setRebuildProgress)
+    setRebuilding(false)
+    if (!result.ok) {
+      setError(result.error ?? '微信账单重建失败，旧记录已保留。')
+      return
+    }
+
+    const savedIds = result.ids ?? []
+    if (savedIds.length) {
+      const totals = totalAmounts(rebuildPlan.replacements)
+      const batch = {
+        ids: savedIds,
+        fileName: `${fileName || '微信支付账单'}（安全重建）`,
+        importedAt: new Date().toISOString(),
+        expenseAmount: totals.expense,
+        incomeAmount: totals.income,
+      }
+      setImportHistory(saveImportBatch(batch))
+    }
+    setImported(result.saved ?? rebuildPlan.replacements.length)
+    setUndoneImport(null)
   }
 
   const undoImportBatch = async (batch: ImportBatch, ids: string[]) => {
@@ -403,6 +468,17 @@ export function PaymentImport({ transactions, onClose, onImport, onCorrectDates,
                   <span><b>本批未覆盖</b><small>支出 {money.format(reconciliation.difference.expense)} · 收入 {money.format(reconciliation.difference.income)}</small></span>
                 </div>
                 {!reconciliation.balanced && <p>文件记录超过单批上限或仍有记录未归入本次处理；完成当前批次后重新选择原文件继续核对。</p>}
+                {rebuildPlan && rebuildPlan.targets.length > 0 && (
+                  <div className="statement-rebuild">
+                    <div>
+                      <b>按原账单重新整理微信记录</b>
+                      <small>{rebuildPlan.startDate} 至 {rebuildPlan.endDate} · 旧记录 {rebuildPlan.targets.length} 笔 → 原账单 {rebuildPlan.replacements.length} 笔</small>
+                    </div>
+                    <button type="button" disabled={rebuilding || importing} onClick={() => void rebuildFromStatement()}>
+                      {rebuilding ? `正在安全重建 ${rebuildProgress}/${rebuildPlan.replacements.length}` : '备份并安全重建'}
+                    </button>
+                  </div>
+                )}
               </section>
             )}
             {remembered > 0 && <p className="import-memory-note">已根据你的历史账目自动归类 {remembered} 笔，导入前仍可查看预览。</p>}

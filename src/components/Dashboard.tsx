@@ -61,6 +61,7 @@ interface DashboardProps {
   loading?: boolean
   onAdd: (input: TransactionInput) => Promise<ActionResult>
   onAddBatch: (inputs: TransactionInput[], onProgress?: (completed: number) => void) => Promise<ActionResult>
+  onReplaceFromStatement: (targets: Transaction[], inputs: TransactionInput[], onProgress?: (completed: number) => void) => Promise<ActionResult>
   onCorrectDates: (transactions: Transaction[], onProgress?: (completed: number) => void) => Promise<ActionResult>
   onDeleteDuplicates: (ids: string[], onProgress?: (completed: number) => void) => Promise<ActionResult>
   onUpdate: (id: string, input: TransactionInput) => Promise<ActionResult>
@@ -104,6 +105,7 @@ export function Dashboard({
   loading,
   onAdd,
   onAddBatch,
+  onReplaceFromStatement,
   onCorrectDates,
   onDeleteDuplicates,
   onUpdate,
@@ -554,6 +556,7 @@ export function Dashboard({
           transactions={transactions}
           onClose={() => setShowImport(false)}
           onImport={onAddBatch}
+          onReplaceFromStatement={onReplaceFromStatement}
           onCorrectDates={onCorrectDates}
           onDeleteDuplicates={onDeleteDuplicates}
         />

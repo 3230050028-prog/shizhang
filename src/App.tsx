@@ -375,6 +375,75 @@ function App() {
     }
   }
 
+  const replaceTransactionsFromStatement = async (
+    targets: Transaction[],
+    inputs: TransactionInput[],
+    onProgress?: (completed: number) => void,
+  ): Promise<ActionResult> => {
+    if (!targets.length || !inputs.length) return failure('重建失败', new Error('没有找到可重建的账目。'))
+
+    const replacementIds = inputs.map(() => crypto.randomUUID())
+    const replacementRows = inputs.map((input, index) => ({
+      ...input,
+      id: replacementIds[index],
+      ...(session ? { user_id: session.user.id } : {}),
+    }))
+    const targetIds = targets.map((item) => item.id)
+
+    if (!supabase || !session) {
+      const removed = new Set(targetIds)
+      const now = new Date().toISOString()
+      const created = replacementRows.map((row) => ({ ...row, created_at: now }))
+      setTransactions((current) => [...created, ...current.filter((item) => !removed.has(item.id))])
+      void persistImportMetadata(inputs)
+      onProgress?.(inputs.length)
+      return { ok: true, saved: created.length, failed: 0, ids: replacementIds }
+    }
+
+    const cloudClient = supabase
+    const removeReplacements = async () => {
+      try {
+        await cloudClient.from('transactions').delete().in('id', replacementIds)
+      } catch {
+        // The backup downloaded before rebuilding remains the final recovery path.
+      }
+    }
+
+    try {
+      await saveInBatches(replacementRows, async (batch) => {
+        const { data, error } = await cloudClient
+          .from('transactions')
+          .upsert(batch, { onConflict: 'id' })
+          .select('id')
+        if (error) throw error
+        return (data as Array<{ id: string }> | null) ?? []
+      }, { batchSize: 20, maxAttempts: 3, onProgress })
+    } catch (error) {
+      await removeReplacements()
+      return failure('新账单写入失败，旧记录未删除', error instanceof BatchSaveError ? error.originalError : error)
+    }
+
+    try {
+      const { data, error } = await cloudClient
+        .from('transactions')
+        .delete()
+        .in('id', targetIds)
+        .select('id')
+      if (error) throw error
+      const deletedIds = new Set(((data as Array<{ id: string }> | null) ?? []).map((item) => item.id))
+      if (deletedIds.size !== targetIds.length) throw new Error(`只确认删除 ${deletedIds.size} / ${targetIds.length} 笔旧记录`)
+    } catch (error) {
+      await removeReplacements()
+      return failure('旧记录删除失败，新写入账目已撤回', error)
+    }
+
+    const removed = new Set(targetIds)
+    const created = replacementRows as Transaction[]
+    setTransactions((current) => [...created, ...current.filter((item) => !removed.has(item.id))])
+    void persistImportMetadata(inputs)
+    return { ok: true, saved: created.length, failed: 0, ids: replacementIds }
+  }
+
   const updateTransaction = async (id: string, input: TransactionInput): Promise<ActionResult> => {
     if (!supabase || !session) {
       setTransactions((current) => current.map((item) => item.id === id ? { ...item, ...input, updated_at: new Date().toISOString() } : item))
@@ -574,6 +643,7 @@ function App() {
       loading={dataLoading}
       onAdd={addTransaction}
       onAddBatch={addTransactions}
+      onReplaceFromStatement={replaceTransactionsFromStatement}
       onCorrectDates={correctTransactionDates}
       onDeleteDuplicates={deleteDuplicateTransactions}
       onUpdate={updateTransaction}
