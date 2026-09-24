@@ -39,4 +39,13 @@ describe('按原账单安全重建', () => {
     expect(buildStatementRebuildPlan([], [])).toBeNull()
     expect(buildStatementRebuildPlan(Array.from({ length: 501 }, () => input()), [])).toBeNull()
   })
+
+  it('写入数据库前移除原文件行号等解析字段', () => {
+    const plan = buildStatementRebuildPlan([
+      { ...input(), sourceLine: 23 },
+    ], [saved('old')])
+
+    expect(plan?.replacements[0]).toEqual(input())
+    expect(plan?.replacements[0]).not.toHaveProperty('sourceLine')
+  })
 })

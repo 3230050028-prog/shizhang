@@ -11,7 +11,7 @@ export interface StatementRebuildPlan {
 }
 
 export const buildStatementRebuildPlan = (
-  sourceRows: TransactionInput[],
+  sourceRows: Array<TransactionInput & { sourceLine?: number }>,
   transactions: Transaction[],
 ): StatementRebuildPlan | null => {
   if (!sourceRows.length || sourceRows.length > 500) return null
@@ -31,6 +31,6 @@ export const buildStatementRebuildPlan = (
     endDate,
     sourceAccounts,
     targets,
-    replacements: sourceRows.map(({ ...row }) => row),
+    replacements: sourceRows.map(({ sourceLine: _sourceLine, ...row }) => row),
   }
 }
