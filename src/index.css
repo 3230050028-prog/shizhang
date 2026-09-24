@@ -185,6 +185,9 @@ a { color: inherit; text-decoration: none; }
 .toolbar-actions { display: flex; gap: 9px; }
 .duplicate-cleanup-shortcut { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 42px; padding: 0 14px; color: #9b443a; border: 1px solid #e1b9b2; border-radius: 12px; background: #fff2ef; font-size: 11px; font-weight: 700; }
 .duplicate-cleanup-shortcut:hover { border-color: #c98075; background: #fee6e1; }
+.reconciliation-add-shortcut { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 42px; padding: 0 14px; color: #286746; border: 1px solid #b9d8c3; border-radius: 12px; background: #edf7f0; font-size: 11px; font-weight: 700; }
+.reconciliation-add-shortcut:hover { border-color: #77ae89; background: #e0f1e5; }
+.reconciliation-add-shortcut:disabled { cursor: wait; opacity: .65; }
 .duplicate-cleanup-empty { display: flex; align-items: flex-start; gap: 10px; margin: 0 0 16px; padding: 13px 14px; color: #6f655e; border: 1px solid #e7ddd7; border-radius: 14px; background: #faf8f5; }
 .duplicate-cleanup-empty svg { flex: 0 0 auto; margin-top: 1px; color: #9b7469; }
 .duplicate-cleanup-empty div { display: grid; gap: 3px; }

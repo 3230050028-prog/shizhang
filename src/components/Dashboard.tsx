@@ -41,6 +41,7 @@ import { escapeCsv } from '../lib/csv'
 import { toLocalMonth } from '../lib/date'
 import { findDuplicateTransactionCopies } from '../lib/paymentImport'
 import { findReconciliationCleanupMatches, reconciliationCleanupTargetCount } from '../lib/reconciliationCleanup'
+import { hasReconciliationMissingTransaction, reconciliationMissingTransaction } from '../lib/reconciliationMissing'
 import { buildRecurringSuggestions } from '../lib/recurringTransactions'
 import type { ActionResult, Budget, SavedAccount, SavedCategory, Transaction, TransactionInput, TransactionType } from '../types'
 import { BudgetForm } from './BudgetForm'
@@ -126,8 +127,13 @@ export function Dashboard({
   const [dayFilter, setDayFilter] = useState<string | null>(null)
   const duplicateCopyCount = useMemo(() => findDuplicateTransactionCopies(transactions).length, [transactions])
   const reconciliationCleanup = useMemo(() => findReconciliationCleanupMatches(transactions), [transactions])
+  const missingTransactionAlreadyAdded = useMemo(
+    () => hasReconciliationMissingTransaction(transactions),
+    [transactions],
+  )
   const [operationError, setOperationError] = useState('')
   const [operationSuccess, setOperationSuccess] = useState('')
+  const [addingMissingTransaction, setAddingMissingTransaction] = useState(false)
 
   const monthTransactions = useMemo(
     () => transactions.filter((item) => item.occurred_on.startsWith(month)),
@@ -241,6 +247,21 @@ export function Dashboard({
     setOperationSuccess(`已按核对名单删除 ${result.saved} 笔记录。建议重新导出本月账单复核。`)
   }
 
+  const addReconciliationMissingTransaction = async () => {
+    if (missingTransactionAlreadyAdded || addingMissingTransaction) return
+    if (!window.confirm('确认补记：2026年9月5日，华南师范大学，支出 ¥5.00，账户“零钱”？')) return
+
+    setAddingMissingTransaction(true)
+    setOperationError('')
+    const result = await onAdd(reconciliationMissingTransaction)
+    setAddingMissingTransaction(false)
+    if (!result.ok) {
+      setOperationError(result.error ?? '补记失败，请稍后重试。')
+      return
+    }
+    setOperationSuccess('已补记9月5日校园消费 ¥5.00（零钱）。本次金额核对处理完成。')
+  }
+
   const resetFilters = () => {
     setQuery('')
     setTypeFilter('all')
@@ -352,6 +373,15 @@ export function Dashboard({
             <span>{displayMonth}<ChevronDown size={16} /></span>
           </label>
           <div className="toolbar-actions">
+            {!loading && !missingTransactionAlreadyAdded && (
+              <button
+                className="reconciliation-add-shortcut"
+                disabled={addingMissingTransaction}
+                onClick={() => void addReconciliationMissingTransaction()}
+              >
+                <Plus size={17} />{addingMissingTransaction ? '补记中…' : '补记漏账 ¥5.00'}
+              </button>
+            )}
             {reconciliationCleanup.ready && (
               <button className="duplicate-cleanup-shortcut" onClick={() => void deleteReconciledTransactions()}>
                 <Trash2 size={17} />删除核对名单 {reconciliationCleanupTargetCount} 笔
