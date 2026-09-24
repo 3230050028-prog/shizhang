@@ -9,6 +9,7 @@ import { BatchSaveError, saveInBatches } from './lib/batchSave'
 import { toLocalMonth } from './lib/date'
 import { clearPasswordRecoveryRequest, readPasswordRecoveryRequest } from './lib/passwordRecovery'
 import { isSupabaseConfigured, supabase } from './lib/supabase'
+import { withTimeout } from './lib/timeout'
 import type { ActionResult, Budget, SavedAccount, SavedCategory, Transaction, TransactionInput } from './types'
 
 const demoStorageKey = 'shizhang-demo-transactions'
@@ -72,6 +73,8 @@ function App() {
   const [showSplash, setShowSplash] = useState(true)
   const [session, setSession] = useState<Session | null>(null)
   const [authLoading, setAuthLoading] = useState(cloudEnabled)
+  const [authError, setAuthError] = useState('')
+  const [authAttempt, setAuthAttempt] = useState(0)
   const [dataLoading, setDataLoading] = useState(false)
   const [loadError, setLoadError] = useState('')
   const [loadAttempt, setLoadAttempt] = useState(0)
@@ -96,15 +99,21 @@ function App() {
   useEffect(() => {
     if (!cloudEnabled || !supabase) return
 
-    void supabase.auth.getSession().then(({ data, error }) => {
+    void withTimeout(
+      supabase.auth.getSession(),
+      12_000,
+      '连接账号服务超时，请检查网络后重试。',
+    ).then(({ data, error }) => {
       setSession(data.session)
       setAuthLoading(false)
+      setAuthError('')
       setDataLoading(Boolean(data.session))
       if (initialRecoveryRequest.requested && !data.session) {
         setRecoveryError(initialRecoveryRequest.error || error?.message || '这个重置链接无效或已经过期，请重新申请。')
       }
-    }).catch(() => {
+    }).catch((error) => {
       setAuthLoading(false)
+      setAuthError(errorMessage(error))
       if (initialRecoveryRequest.requested) setRecoveryError('无法验证重置链接，请检查网络后重新打开邮件链接。')
     })
 
@@ -115,6 +124,7 @@ function App() {
       }
       setSession(nextSession)
       setAuthLoading(false)
+      setAuthError('')
       setDataLoading(Boolean(nextSession))
       if (!nextSession) {
         setTransactions([])
@@ -125,7 +135,7 @@ function App() {
     })
 
     return () => listener.subscription.unsubscribe()
-  }, [cloudEnabled])
+  }, [authAttempt, cloudEnabled])
 
   const clearPasswordRecoveryLocation = () => {
     window.history.replaceState(null, '', clearPasswordRecoveryRequest(window.location.href))
@@ -159,12 +169,16 @@ function App() {
     let active = true
     void (async () => {
       try {
-        const [transactionResult, budgetResult, categoryResult, accountResult] = await Promise.all([
-          supabase.from('transactions').select('*').order('occurred_on', { ascending: false }),
-          supabase.from('budgets').select('*').order('month', { ascending: false }),
-          supabase.from('categories').select('*').order('name'),
-          supabase.from('accounts').select('*').order('name'),
-        ])
+        const [transactionResult, budgetResult, categoryResult, accountResult] = await withTimeout(
+          Promise.all([
+            supabase.from('transactions').select('*').order('occurred_on', { ascending: false }),
+            supabase.from('budgets').select('*').order('month', { ascending: false }),
+            supabase.from('categories').select('*').order('name'),
+            supabase.from('accounts').select('*').order('name'),
+          ]),
+          15_000,
+          '读取账本超时，请检查网络后重新加载。',
+        )
         if (!active) return
         if (transactionResult.error) throw transactionResult.error
         if (budgetResult.error) throw budgetResult.error
@@ -518,6 +532,29 @@ function App() {
 
   if (authLoading) {
     return <div className="app-loading"><span className="brand-mark">拾</span><p>正在打开账本…</p></div>
+  }
+
+  if (cloudEnabled && !session && authError) {
+    return (
+      <main className="connection-error-page">
+        <section className="connection-error-card" role="alert">
+          <span className="brand-mark">拾</span>
+          <h1>暂时无法连接拾账</h1>
+          <p>{authError}</p>
+          <button
+            className="primary-button"
+            type="button"
+            onClick={() => {
+              setAuthError('')
+              setAuthLoading(true)
+              setAuthAttempt((value) => value + 1)
+            }}
+          >
+            重新连接
+          </button>
+        </section>
+      </main>
+    )
   }
 
   if (recoveryMode) {
