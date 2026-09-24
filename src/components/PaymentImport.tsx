@@ -207,7 +207,6 @@ export function PaymentImport({ transactions, onClose, onImport, onReplaceFromSt
     )
     if (!confirmed) return
 
-    downloadRebuildBackup(rebuildPlan.targets, rebuildPlan.startDate, rebuildPlan.endDate)
     setRebuilding(true)
     setRebuildProgress(0)
     setError('')
@@ -474,9 +473,19 @@ export function PaymentImport({ transactions, onClose, onImport, onReplaceFromSt
                       <b>按原账单重新整理微信记录</b>
                       <small>{rebuildPlan.startDate} 至 {rebuildPlan.endDate} · 旧记录 {rebuildPlan.targets.length} 笔 → 原账单 {rebuildPlan.replacements.length} 笔</small>
                     </div>
-                    <button type="button" disabled={rebuilding || importing} onClick={() => void rebuildFromStatement()}>
-                      {rebuilding ? `正在安全重建 ${rebuildProgress}/${rebuildPlan.replacements.length}` : '备份并安全重建'}
-                    </button>
+                    <div className="statement-rebuild-actions">
+                      <button
+                        className="backup-button"
+                        type="button"
+                        disabled={rebuilding || importing}
+                        onClick={() => downloadRebuildBackup(rebuildPlan.targets, rebuildPlan.startDate, rebuildPlan.endDate)}
+                      >
+                        1. 下载备份
+                      </button>
+                      <button type="button" disabled={rebuilding || importing} onClick={() => void rebuildFromStatement()}>
+                        {rebuilding ? `正在安全重建 ${rebuildProgress}/${rebuildPlan.replacements.length}` : '2. 已保存备份，开始重建'}
+                      </button>
+                    </div>
                   </div>
                 )}
               </section>
