@@ -13,7 +13,7 @@ export default function SpendingChart({ data, expense, formatMoney }: SpendingCh
       <div className="chart-wrap">
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
-            <Pie data={data} dataKey="value" nameKey="name" innerRadius={58} outerRadius={86} paddingAngle={3} isAnimationActive={false}>
+            <Pie data={data} dataKey="value" nameKey="name" innerRadius={60} outerRadius={86} paddingAngle={2} cornerRadius={3} stroke="#fffdf8" strokeWidth={3} isAnimationActive={false}>
               {data.map((item) => <Cell key={item.name} fill={categoryColors[item.name] ?? '#8d9b92'} />)}
             </Pie>
             <Tooltip formatter={(value) => formatMoney(Number(value))} />
