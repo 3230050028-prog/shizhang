@@ -26,7 +26,6 @@ import {
   ReceiptText,
   Search,
   ShoppingBag,
-  Sparkles,
   SlidersHorizontal,
   Trash2,
   TrendingUp,
@@ -342,10 +341,6 @@ export function Dashboard({
           <a href="#budget"><WalletCards size={19} />预算</a>
           <a href="#insight"><BookOpen size={19} />消费洞察</a>
         </nav>
-        <div className="sidebar-tip">
-          <span>本月小贴士</span>
-          <p>先记录，再优化。坚持记账比追求完美更重要。</p>
-        </div>
         <div className="user-row">
           <span className="avatar">{(email?.[0] || '拾').toUpperCase()}</span>
           <span><b>{demo ? '体验用户' : '我的账本'}</b><small>{demo ? '演示模式' : email}</small></span>
@@ -360,12 +355,11 @@ export function Dashboard({
           <button className="icon-button menu-button" onClick={() => setSidebarOpen(true)} aria-label="打开菜单"><Menu size={21} /></button>
           <div>
             <p className="eyebrow">我的账本</p>
-            <h1>今天也要认真生活</h1>
+            <h1>账本总览</h1>
           </div>
           <div className="topbar-actions">
             {demo && <span className="demo-badge">演示模式</span>}
-            <button className="icon-button" aria-label="通知"><Bell size={20} /></button>
-            <button className="primary-button" onClick={() => setShowForm(true)}><Sparkles size={18} />智能记账</button>
+            <button className="primary-button" onClick={() => setShowForm(true)}><Plus size={18} />记一笔</button>
           </div>
         </header>
 
@@ -389,9 +383,11 @@ export function Dashboard({
                 <Trash2 size={17} />删除核对名单 {reconciliationCleanupTargetCount} 笔
               </button>
             )}
-            <button className="duplicate-cleanup-shortcut" onClick={() => setShowImport(true)}>
-              <Trash2 size={17} />{duplicateCopyCount > 0 ? `清理重复 ${duplicateCopyCount} 笔` : '检查重复'}
-            </button>
+            {duplicateCopyCount > 0 && (
+              <button className="duplicate-cleanup-shortcut" onClick={() => setShowImport(true)}>
+                <Trash2 size={17} />清理重复 {duplicateCopyCount} 笔
+              </button>
+            )}
             <button className="secondary-button" onClick={() => setShowImport(true)}><Upload size={17} />导入账单</button>
             <button className="secondary-button" onClick={exportCsv}><Download size={17} />导出本月</button>
           </div>
@@ -529,7 +525,13 @@ export function Dashboard({
         </section>
       </main>
 
-      <button className="mobile-add" onClick={() => setShowForm(true)} aria-label="智能记账"><Plus size={24} /></button>
+      <nav className="mobile-tabbar" aria-label="手机端导航">
+        <a className="active" href="#overview"><LayoutDashboard size={19} /><span>总览</span></a>
+        <a href="#records"><ReceiptText size={19} /><span>明细</span></a>
+        <button type="button" onClick={() => setShowForm(true)} aria-label="记一笔"><Plus size={22} /></button>
+        <a href="#calendar"><CalendarDays size={19} /><span>日历</span></a>
+        <a href="#budget"><WalletCards size={19} /><span>预算</span></a>
+      </nav>
       {(showForm || editingTransaction) && (
         <TransactionForm
           initial={editingTransaction ?? suggestedTransaction ?? undefined}
