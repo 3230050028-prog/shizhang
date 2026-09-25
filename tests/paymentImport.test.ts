@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { findDuplicateTransactionCopies, findPaymentDateCorrections, parsePaymentStatement, spreadsheetCellToText, splitPaymentRows, transactionFingerprint } from '../src/lib/paymentImport'
+import { findDuplicateTransactionCopies, findPaymentDateCorrections, inferTransactionCategory, parsePaymentStatement, spreadsheetCellToText, splitPaymentRows, transactionFingerprint } from '../src/lib/paymentImport'
 import type { TransactionInput } from '../src/types'
 
 const payment: TransactionInput = {
@@ -91,5 +91,22 @@ describe('账单日期', () => {
     const excelDate = new Date(Date.UTC(2026, 8, 22, 21, 15, 0))
 
     expect(spreadsheetCellToText(excelDate)).toBe('2026-09-22 21:15:00')
+  })
+})
+
+describe('常见平台分类', () => {
+  it.each([
+    ['美团平台商户', '餐饮'],
+    ['淘宝闪购订单', '餐饮'],
+    ['饿了么外卖', '餐饮'],
+    ['淘宝订单', '购物'],
+    ['拼多多平台商户', '购物'],
+    ['京东订单', '购物'],
+    ['美团打车', '交通'],
+    ['美团药房买药', '医疗'],
+    ['美团酒店住宿', '娱乐'],
+    ['美团优选订单', '购物'],
+  ])('%s 归类为%s', (description, category) => {
+    expect(inferTransactionCategory(description, 'expense')).toBe(category)
   })
 })

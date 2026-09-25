@@ -1,4 +1,5 @@
 import type { Transaction, TransactionInput, TransactionType } from '../types'
+import { inferTransactionCategory } from './paymentImport'
 
 export type MerchantCategoryMemory = Map<string, string>
 
@@ -32,6 +33,10 @@ export const buildMerchantCategoryMemory = (transactions: Transaction[]): Mercha
 export const applyRememberedCategory = <T extends TransactionInput>(input: T, memory: MerchantCategoryMemory): T => {
   const merchant = normalizeMerchantKey(input.note)
   if (!merchant) return input
+  const knownCategory = inferTransactionCategory(input.note, input.type)
+  if (knownCategory !== '其他') {
+    return knownCategory !== input.category ? { ...input, category: knownCategory } : input
+  }
   const category = memory.get(memoryKey(input.type, input.note))
   return category && category !== input.category ? { ...input, category } : input
 }

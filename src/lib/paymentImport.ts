@@ -73,13 +73,18 @@ export const inferTransactionCategory = (value: string, type: TransactionType) =
     return '其他'
   }
 
-  if (/餐饮|美食|早餐|午餐|晚餐|早饭|午饭|晚饭|餐厅|外卖|奶茶|咖啡|超市|星巴克|瑞幸|肯德基|麦当劳/.test(value)) return '餐饮'
-  if (/交通|出行|打车|公交|地铁|加油|停车|车票/.test(value)) return '交通'
-  if (/购物|百货|服饰|数码|淘宝|京东|拼多多/.test(value)) return '购物'
+  // 先识别具体用途，避免“美团打车”“美团药房”等被平台默认分类覆盖。
+  if (/医疗|医院|诊所|药房|药店|买药|购药|挂号|健康/.test(value)) return '医疗'
+  if (/交通|出行|打车|骑车|单车|公交|地铁|加油|停车|车票|滴滴|哈啰/.test(value)) return '交通'
   if (/居住|住房|房租|物业|水费|电费|燃气/.test(value)) return '居住'
-  if (/娱乐|游戏|电影|视频|会员|旅游/.test(value)) return '娱乐'
-  if (/医疗|医院|药|健康/.test(value)) return '医疗'
   if (/教育|培训|课程|书店|学费/.test(value)) return '教育'
+  if (/娱乐|游戏|电影|视频|会员|旅游|酒店|住宿|门票/.test(value)) return '娱乐'
+
+  if (/餐饮|美食|早餐|午餐|晚餐|早饭|午饭|晚饭|餐厅|外卖|奶茶|咖啡|超市|星巴克|瑞幸|肯德基|麦当劳|饿了么|淘宝闪购|京东外卖|抖音外卖/.test(value)) return '餐饮'
+  if (/购物|百货|服饰|数码|淘宝|天猫|京东|拼多多|唯品会|苏宁易购|闲鱼|得物|抖音商城|快手小店|美团优选/.test(value)) return '购物'
+
+  // 平台名称只能作为兜底；上面的具体用途始终优先。
+  if (/美团/.test(value)) return '餐饮'
   return '其他'
 }
 
