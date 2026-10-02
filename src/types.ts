@@ -53,3 +53,41 @@ export interface ActionResult {
   failed?: number
   ids?: string[]
 }
+
+export type AIProviderId =
+  | 'openai'
+  | 'deepseek'
+  | 'moonshotai-cn'
+  | 'openrouter'
+  | 'kimi-coding'
+
+export interface AIModelOption {
+  id: string
+  name: string
+  provider: AIProviderId
+  contextWindow?: number
+  supportsImages?: boolean
+}
+
+export interface AIProviderConfig {
+  id: string
+  provider: AIProviderId
+  model: string
+  keyHint: string
+  isDefault: boolean
+  lastCheckedAt?: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface AIChatMessage {
+  role: 'user' | 'assistant'
+  content: string
+}
+
+export interface AIUsage {
+  input: number
+  output: number
+  total: number
+  cost?: number
+}

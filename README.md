@@ -20,6 +20,7 @@
 - 支持微信、支付宝导出的 CSV、TXT、Excel 和 ZIP 账单，并提供预览、重复检查和批量确认。
 - 自动过滤账单截图中的月度收入、支出合计，避免把汇总金额误记成单笔消费。
 - 提供月度收支、预算进度、分类图表、支出日历、搜索筛选和周期账单提醒。
+- 内置账本 AI 助手，可在页面连接 DeepSeek、Kimi、OpenAI、OpenRouter 或 Kimi For Coding，并显示 token 与预估费用。
 - 使用 Supabase Auth、PostgreSQL 和 RLS，保证不同用户只能访问自己的账目。
 - 支持安装到手机桌面的 PWA，可独立全屏启动并提示安全更新。
 
@@ -33,6 +34,10 @@ flowchart LR
   D --> R[RLS 按 user_id 隔离]
   F --> O[Tesseract.js 本地 OCR]
   F --> I[CSV / Excel / ZIP 账单解析]
+  F --> E[Supabase AI Gateway]
+  E --> K[加密的用户模型凭据]
+  E --> M[pi-ai 统一模型接口]
+  M --> L[DeepSeek / Kimi / OpenAI / OpenRouter]
   G[GitHub main 分支] --> C[GitHub Actions 测试与构建]
   C --> P[GitHub Pages + PWA]
 ```
@@ -45,6 +50,7 @@ flowchart LR
 | 文件导入 | read-excel-file、zip.js | 读取 CSV、TXT、Excel 和 ZIP 支付账单 |
 | 数据展示 | Recharts | 支出分类图表和月度统计 |
 | PWA | vite-plugin-pwa | 桌面安装、独立启动和版本更新 |
+| AI 模型 | pi-ai、Supabase Edge Functions、AES-GCM | 统一模型目录、密钥加密、账本问答和用量统计 |
 | 工程质量 | Vitest、Oxlint、GitHub Actions | 自动测试、代码检查、构建和部署 |
 
 ## 我负责的工作
@@ -55,6 +61,7 @@ flowchart LR
 - 使用 React 和 TypeScript 实现账目增删改查、筛选、预算、图表、日历与 PWA。
 - 设计 Supabase 数据表、登录流程和 RLS 用户隔离策略。
 - 实现自然语言记账、截图 OCR、账单文件导入、重复检测和人工确认流程。
+- 设计模型配置与 AI 账本问答流程，通过云函数隔离并加密用户的模型密钥。
 - 编写自动化测试，配置 GitHub Actions，并通过 GitHub Pages 持续部署。
 - 根据真实手机测试持续修复日期识别、汇总金额误识别、重复导入和移动端体验问题。
 
@@ -119,6 +126,7 @@ npm run build
 - CSV、TXT、Excel、ZIP 支付账单导入与重复检测。
 - 常用模板和周期账单提醒。
 - 响应式手机界面与可安装 PWA。
+- AI 模型配置、连接测试、默认模型切换、账本问答与 token/费用展示。
 - 未配置数据库时的本地演示模式。
 
 ## 本地运行
@@ -145,6 +153,37 @@ npm run dev
 - `supabase/migrations/002_reliability.sql`
 - `supabase/migrations/003_accounts.sql`
 
+### 启用 AI 模型配置
+
+AI 功能不能只靠 GitHub Pages 运行，因为 API Key 不能安全地保存在公开网页里。拾账通过 Supabase Edge Function 调用模型，并使用 AES-GCM 加密每位用户保存的密钥。
+
+1. 在 Supabase SQL Editor 运行 `supabase/migrations/004_ai_provider_configs.sql`。
+2. 在本机登录并关联当前 Supabase 项目：
+
+```powershell
+npx supabase login
+npx supabase link --project-ref vbsjhhhtjuujpbnxlfsn
+```
+
+3. 生成只保存在 Supabase 云端的加密主密钥并部署函数：
+
+```powershell
+$bytes = New-Object byte[] 48
+[System.Security.Cryptography.RandomNumberGenerator]::Fill($bytes)
+$secret = [Convert]::ToBase64String($bytes)
+npx supabase secrets set AI_CREDENTIAL_ENCRYPTION_KEY="$secret" --project-ref vbsjhhhtjuujpbnxlfsn
+npx supabase functions deploy ai-gateway --project-ref vbsjhhhtjuujpbnxlfsn
+```
+
+部署完成后，登录拾账，打开“AI 助手”→“模型配置”，选择服务商和模型，填写用户自己的 API Key，再点击“测试”。网页只会显示密钥末四位，完整密钥不会返回浏览器。
+
+当前版本使用 [pi-ai](https://github.com/earendil-works/pi/blob/main/packages/ai/README.md) 的统一模型目录和调用接口，支持：
+
+- DeepSeek、月之暗面、OpenRouter 和 OpenAI 的 API Key。
+- Kimi For Coding 订阅提供的 API Key。
+
+OpenAI API 余额与 ChatGPT Plus/Pro 会员不是同一项服务。pi-ai 虽然也提供部分 OAuth 订阅登录能力，但其 OAuth 流程是 Node 环境使用的交互式流程；拾账当前的多用户网页版本暂不保存 ChatGPT 或 Claude 会员登录令牌。
+
 前端只能使用 Publishable key。不要把 `.env.local`、Secret key 或 Service role key 上传到公开仓库。
 
 ## 安装到手机桌面
@@ -156,7 +195,8 @@ npm run dev
 
 ## 后续计划
 
-- AI 月度消费总结与节省建议。
+- AI 月度消费总结、分类纠错建议和可确认的自然语言记账。
+- 在供应商政策和网页 OAuth 回调稳定后，评估 ChatGPT、Claude 等订阅登录。
 - 多账本和家庭共享账本。
 - 资产账户、余额和净资产趋势。
 - 扩充 OCR 样本与端到端浏览器测试。

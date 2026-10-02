@@ -26,6 +26,7 @@ import {
   ReceiptText,
   Search,
   ShoppingBag,
+  Sparkles,
   SlidersHorizontal,
   Trash2,
   TrendingUp,
@@ -49,6 +50,7 @@ import { PaymentImport } from './PaymentImport'
 import { TransactionForm } from './TransactionForm'
 
 const SpendingChart = lazy(() => import('./SpendingChart'))
+const AIWorkspace = lazy(() => import('./AIWorkspace'))
 
 interface DashboardProps {
   transactions: Transaction[]
@@ -119,6 +121,7 @@ export function Dashboard({
   const [suggestedTransaction, setSuggestedTransaction] = useState<TransactionInput | null>(null)
   const [showBudgetForm, setShowBudgetForm] = useState(false)
   const [showImport, setShowImport] = useState(false)
+  const [showAI, setShowAI] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [month, setMonth] = useState(toLocalMonth())
@@ -340,6 +343,7 @@ export function Dashboard({
           <a href="#calendar"><CalendarDays size={19} />支出日历</a>
           <a href="#budget"><WalletCards size={19} />预算</a>
           <a href="#insight"><BookOpen size={19} />消费洞察</a>
+          <button type="button" onClick={() => { setShowAI(true); setSidebarOpen(false) }}><Sparkles size={19} />AI 助手</button>
         </nav>
         <div className="user-row">
           <span className="avatar">{(email?.[0] || '拾').toUpperCase()}</span>
@@ -359,6 +363,7 @@ export function Dashboard({
           </div>
           <div className="topbar-actions">
             {demo && <span className="demo-badge">演示模式</span>}
+            <button className="ai-entry-button" type="button" onClick={() => setShowAI(true)}><Sparkles size={17} />AI 助手</button>
             <button className="primary-button" onClick={() => setShowForm(true)}><Plus size={18} />记一笔</button>
           </div>
         </header>
@@ -530,7 +535,7 @@ export function Dashboard({
         <a href="#records"><ReceiptText size={19} /><span>明细</span></a>
         <button type="button" onClick={() => setShowForm(true)} aria-label="记一笔"><Plus size={22} /></button>
         <a href="#calendar"><CalendarDays size={19} /><span>日历</span></a>
-        <a href="#budget"><WalletCards size={19} /><span>预算</span></a>
+        <button className="mobile-ai-button" type="button" onClick={() => setShowAI(true)} aria-label="打开 AI 助手"><Sparkles size={19} /><span>AI</span></button>
       </nav>
       {(showForm || editingTransaction) && (
         <TransactionForm
@@ -562,6 +567,11 @@ export function Dashboard({
           onCorrectDates={onCorrectDates}
           onDeleteDuplicates={onDeleteDuplicates}
         />
+      )}
+      {showAI && (
+        <Suspense fallback={<div className="modal-backdrop"><p className="loading-text">正在打开 AI 助手…</p></div>}>
+          <AIWorkspace demo={demo} onClose={() => setShowAI(false)} />
+        </Suspense>
       )}
     </div>
   )
