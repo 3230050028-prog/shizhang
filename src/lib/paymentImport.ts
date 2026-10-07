@@ -73,6 +73,11 @@ export const inferTransactionCategory = (value: string, type: TransactionType) =
     return '其他'
   }
 
+  // 用户指定的商户分类优先于“打车”“奶茶”等通用用途词。
+  if (/高德打车/.test(value)) return '生活'
+  if (/霸王茶姬/.test(value)) return '娱乐'
+  if (/抖音电商/.test(value)) return '购物'
+
   // 先识别具体用途，避免“美团打车”“美团药房”等被平台默认分类覆盖。
   if (/医疗|医院|诊所|药房|药店|买药|购药|挂号|健康/.test(value)) return '医疗'
   if (/交通|出行|打车|骑车|单车|公交|地铁|加油|停车|车票|滴滴|哈啰/.test(value)) return '交通'

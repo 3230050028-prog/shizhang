@@ -76,6 +76,7 @@ interface DashboardProps {
 const iconMap: Record<string, LucideIcon> = {
   餐饮: Utensils,
   交通: Car,
+  生活: Home,
   购物: ShoppingBag,
   居住: Home,
   娱乐: Clapperboard,
@@ -473,7 +474,7 @@ export function Dashboard({
             <div className="budget-number"><strong>{budgetAmount ? money.format(budgetAmount) : '尚未设置'}</strong><span>{budgetAmount ? '总支出预算' : '设置预算后可获得进度提醒'}</span></div>
             <div className="progress-track"><span style={{ width: `${Math.min(budgetPercent, 100)}%` }} /></div>
             <div className="progress-label"><span>已使用 {money.format(expense)}</span><span>{budgetAmount ? `${budgetPercent}%` : '--'}</span></div>
-            <p className="budget-note">{isOverBudget ? `已超出 ${money.format(expense - budgetAmount)}，可以回顾本月支出分类。` : budgetAmount ? `还可支出 ${money.format(Math.max(budgetAmount - expense, 0))}。` : '设一个轻松可执行的目标，比追求完美更重要。'}</p>
+            <p className="budget-note">{isOverBudget ? `已超出 ${money.format(expense - budgetAmount)}，可以回顾本月支出分类。` : budgetAmount ? `还可支出 ${money.format(Math.max(budgetAmount - expense, 0))}。` : '设一个轻松可执行的目标，比追求完美更重要。'}<br />本月收支结余 {money.format(balance)}（收入减支出，不抵扣预算）。</p>
           </article>
         </section>
 

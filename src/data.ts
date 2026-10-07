@@ -4,6 +4,7 @@ import { toLocalDate } from './lib/date'
 export const expenseCategories = [
   '餐饮',
   '交通',
+  '生活',
   '购物',
   '居住',
   '娱乐',
@@ -73,6 +74,7 @@ export const demoTransactions: Transaction[] = [
 export const categoryColors: Record<string, string> = {
   餐饮: '#c96f4b',
   交通: '#477a78',
+  生活: '#7b8a62',
   购物: '#a47755',
   居住: '#b89a4f',
   娱乐: '#8d6c8d',

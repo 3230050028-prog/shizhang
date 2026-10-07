@@ -106,6 +106,9 @@ describe('常见平台分类', () => {
     ['美团药房买药', '医疗'],
     ['美团酒店住宿', '娱乐'],
     ['美团优选订单', '购物'],
+    ['高德打车订单', '生活'],
+    ['抖音电商商家', '购物'],
+    ['霸王茶姬奶茶', '娱乐'],
   ])('%s 归类为%s', (description, category) => {
     expect(inferTransactionCategory(description, 'expense')).toBe(category)
   })
