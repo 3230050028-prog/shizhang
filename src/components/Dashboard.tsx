@@ -37,6 +37,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { categoryColors } from '../data'
+import { calculateBudgetBalance } from '../lib/budget'
 import { escapeCsv } from '../lib/csv'
 import { toLocalMonth } from '../lib/date'
 import { findDuplicateTransactionCopies } from '../lib/paymentImport'
@@ -175,6 +176,7 @@ export function Dashboard({
   const balance = income - expense
   const currentBudget = budgets.find((item) => item.month.startsWith(month) && item.category === '全部')
   const budgetAmount = Number(currentBudget?.amount ?? 0)
+  const budgetBalance = calculateBudgetBalance(budgetAmount, expense, income)
   const budgetPercent = budgetAmount ? Math.round((expense / budgetAmount) * 100) : 0
   const isOverBudget = budgetAmount > 0 && expense > budgetAmount
   const recurringSuggestions = useMemo(
@@ -474,7 +476,7 @@ export function Dashboard({
             <div className="budget-number"><strong>{budgetAmount ? money.format(budgetAmount) : '尚未设置'}</strong><span>{budgetAmount ? '总支出预算' : '设置预算后可获得进度提醒'}</span></div>
             <div className="progress-track"><span style={{ width: `${Math.min(budgetPercent, 100)}%` }} /></div>
             <div className="progress-label"><span>已使用 {money.format(expense)}</span><span>{budgetAmount ? `${budgetPercent}%` : '--'}</span></div>
-            <p className="budget-note">{isOverBudget ? `已超出 ${money.format(expense - budgetAmount)}，可以回顾本月支出分类。` : budgetAmount ? `还可支出 ${money.format(Math.max(budgetAmount - expense, 0))}。` : '设一个轻松可执行的目标，比追求完美更重要。'}<br />本月收支结余 {money.format(balance)}（收入减支出，不抵扣预算）。</p>
+            <p className="budget-note">{isOverBudget ? `已超出 ${money.format(expense - budgetAmount)}，可以回顾本月支出分类。` : budgetAmount ? `还可支出 ${money.format(Math.max(budgetAmount - expense, 0))}。` : '设一个轻松可执行的目标，比追求完美更重要。'}{budgetAmount > 0 && <><br />本月收支结余 {money.format(budgetBalance)}（预算减支出再加收入）。</>}</p>
           </article>
         </section>
 
