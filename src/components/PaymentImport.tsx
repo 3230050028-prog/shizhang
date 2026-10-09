@@ -64,6 +64,7 @@ export function PaymentImport({ transactions, onClose, onImport, onReplaceFromSt
   const [undoProgress, setUndoProgress] = useState(0)
   const [undoneImport, setUndoneImport] = useState<number | null>(null)
   const [showGuide, setShowGuide] = useState(true)
+  const [showImportHistory, setShowImportHistory] = useState(false)
   const [showDuplicatePreview, setShowDuplicatePreview] = useState(false)
   const existing = useMemo(
     () => new Set(transactions.map(transactionFingerprint)),
@@ -313,7 +314,7 @@ export function PaymentImport({ transactions, onClose, onImport, onReplaceFromSt
     </div>
   )
 
-  const importHistoryPanel = activeImportHistory.length > 0 ? (
+  const importHistoryPanel = showImportHistory && activeImportHistory.length > 0 ? (
     <section className="import-history-panel">
       <header><History size={18} /><div><b>最近导入历史</b><small>仅保存在本设备，最多显示10次；撤销只删除所选批次。</small></div></header>
       <div className="import-history-list">
@@ -347,6 +348,18 @@ export function PaymentImport({ transactions, onClose, onImport, onReplaceFromSt
             <button className="import-guide-toggle" type="button" onClick={() => setShowGuide((visible) => !visible)} aria-expanded={showGuide}>
               <BookOpen size={15} />{showGuide ? '收起教程' : '导入教程'}
             </button>
+            {activeImportHistory.length > 0 && (
+              <button
+                className="icon-button"
+                type="button"
+                onClick={() => setShowImportHistory((visible) => !visible)}
+                aria-label={showImportHistory ? '收起最近导入记录' : '查看最近导入记录'}
+                aria-expanded={showImportHistory}
+                title="最近导入记录"
+              >
+                <History size={18} />
+              </button>
+            )}
             <button className="icon-button" type="button" onClick={onClose} aria-label="关闭"><X size={20} /></button>
           </div>
         </header>
