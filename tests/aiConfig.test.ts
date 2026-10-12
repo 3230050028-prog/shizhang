@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
-import { aiProviders, friendlyGatewayError } from '../src/lib/ai'
+import { aiProviders, friendlyGatewayError, listAIModels } from '../src/lib/ai'
 
 describe('AI model configuration catalog', () => {
   it('keeps provider ids unique and exposes a secure key-management link', () => {
@@ -26,6 +26,13 @@ describe('AI model configuration catalog', () => {
       id: 'qwen',
       name: '通义千问 / 阿里云百炼',
     }))
+  })
+
+  it('keeps Qwen models available when the remote catalog is temporarily unavailable', async () => {
+    await expect(listAIModels('qwen')).resolves.toEqual([
+      expect.objectContaining({ id: 'qwen-plus', provider: 'qwen' }),
+      expect.objectContaining({ id: 'qwen3.8-flash', provider: 'qwen' }),
+    ])
   })
 
   it('turns provider authentication failures into an actionable message', () => {

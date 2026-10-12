@@ -115,6 +115,7 @@ export function AIWorkspace({ demo, onClose }: AIWorkspaceProps) {
         if (!active) return
         setModels(items)
         setModel((current) => current || items[0]?.id || '')
+        setSettingsError('')
       })
       .catch((error) => {
         if (active) setSettingsError(error instanceof Error ? error.message : '模型列表读取失败。')
@@ -323,7 +324,7 @@ export function AIWorkspace({ demo, onClose }: AIWorkspaceProps) {
                       {existingConfig && !models.some((item) => item.id === existingConfig.model) && <option value={existingConfig.model}>{existingConfig.model}</option>}
                       {models.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.id}</option>)}
                     </select>
-                    <small>{models.length ? `已从统一模型目录读取 ${models.length} 个可用模型。` : '请先确认 AI 云端功能已经部署。'}</small>
+                    <small>{models.length ? `已读取 ${models.length} 个可用模型。` : '模型目录暂时不可用，请切换服务商后重试。'}</small>
                   </label>
                   <label>{selectedProvider.keyLabel}
                     <input type="password" autoComplete="new-password" value={apiKey} onChange={(event) => setApiKey(event.target.value)} placeholder={existingConfig ? `已保存密钥 …${existingConfig.keyHint}；留空则不修改` : '仅发送到拾账云端加密保存'} />

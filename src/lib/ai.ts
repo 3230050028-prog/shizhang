@@ -64,6 +64,11 @@ interface GatewayResponse<T> {
   error?: string
 }
 
+const qwenModels: AIModelOption[] = [
+  { id: 'qwen-plus', name: '千问 Plus', provider: 'qwen', contextWindow: 1_000_000, supportsImages: false },
+  { id: 'qwen3.8-flash', name: '千问 3.8 Flash', provider: 'qwen', contextWindow: 1_000_000, supportsImages: false },
+]
+
 export const friendlyGatewayError = (message: string) => {
   if (/authentication fails|api key[^\n]*(invalid|incorrect)|invalid[_ ]api[_ ]key/i.test(message)) {
     return 'API Key 无效或与当前服务商不匹配，请重新选择服务商并填写对应密钥。'
@@ -107,7 +112,9 @@ export const listAIConfigs = () =>
   invokeGateway<AIProviderConfig[]>({ action: 'list-configs' })
 
 export const listAIModels = (provider: AIProviderId) =>
-  invokeGateway<AIModelOption[]>({ action: 'list-models', provider })
+  provider === 'qwen'
+    ? Promise.resolve(qwenModels)
+    : invokeGateway<AIModelOption[]>({ action: 'list-models', provider })
 
 export const saveAIConfig = (input: {
   provider: AIProviderId
