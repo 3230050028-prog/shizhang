@@ -168,6 +168,7 @@ create trigger ai_provider_configs_set_updated_at
 
 alter table public.ai_provider_configs enable row level security;
 revoke all on table public.ai_provider_configs from anon, authenticated;
+grant select, insert, update, delete on table public.ai_provider_configs to service_role;
 
 create table if not exists public.ai_usage_logs (
   id uuid primary key default gen_random_uuid(),
@@ -187,3 +188,4 @@ create index if not exists ai_usage_logs_user_date_idx
 
 alter table public.ai_usage_logs enable row level security;
 revoke all on table public.ai_usage_logs from anon, authenticated;
+grant insert on table public.ai_usage_logs to service_role;
