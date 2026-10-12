@@ -57,6 +57,7 @@ export interface ActionResult {
 export type AIProviderId =
   | 'openai'
   | 'deepseek'
+  | 'qwen'
   | 'moonshotai-cn'
   | 'openrouter'
   | 'kimi-coding'

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
-import { aiProviders } from '../src/lib/ai'
+import { aiProviders, friendlyGatewayError } from '../src/lib/ai'
 
 describe('AI model configuration catalog', () => {
   it('keeps provider ids unique and exposes a secure key-management link', () => {
@@ -9,6 +9,7 @@ describe('AI model configuration catalog', () => {
     expect(new Set(ids).size).toBe(ids.length)
     expect(ids).toEqual(expect.arrayContaining([
       'deepseek',
+      'qwen',
       'moonshotai-cn',
       'openrouter',
       'openai',
@@ -20,6 +21,27 @@ describe('AI model configuration catalog', () => {
     }
   })
 
+  it('offers Alibaba Cloud Qwen as a separate provider', () => {
+    expect(aiProviders).toContainEqual(expect.objectContaining({
+      id: 'qwen',
+      name: '通义千问 / 阿里云百炼',
+    }))
+  })
+
+  it('turns provider authentication failures into an actionable message', () => {
+    expect(friendlyGatewayError('Authentication Fails, api key is invalid')).toBe(
+      'API Key 无效或与当前服务商不匹配，请重新选择服务商并填写对应密钥。',
+    )
+  })
+
+  it('keeps the Qwen provider and endpoints in the Edge Function catalog', () => {
+    const gateway = readFileSync(new URL('../supabase/functions/ai-gateway/index.ts', import.meta.url), 'utf8')
+
+    expect(gateway).toContain("'qwen'")
+    expect(gateway).toContain('https://dashscope.aliyuncs.com/compatible-mode/v1')
+    expect(gateway).toContain('https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1')
+  })
+
   it('allows only the Edge Function service role to manage encrypted AI credentials', () => {
     const migration = readFileSync(new URL('../supabase/migrations/004_ai_provider_configs.sql', import.meta.url), 'utf8')
 
@@ -27,5 +49,6 @@ describe('AI model configuration catalog', () => {
     expect(migration).toContain('grant select, insert, update, delete on table public.ai_provider_configs to service_role;')
     expect(migration).toContain('revoke all on table public.ai_usage_logs from anon, authenticated;')
     expect(migration).toContain('grant insert on table public.ai_usage_logs to service_role;')
+    expect(migration).toContain('grant select on table public.transactions to service_role;')
   })
 })

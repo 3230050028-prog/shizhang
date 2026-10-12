@@ -37,6 +37,7 @@ alter table public.transactions enable row level security;
 
 revoke all on table public.transactions from anon;
 grant select, insert, update, delete on table public.transactions to authenticated;
+grant select on table public.transactions to service_role;
 
 drop policy if exists "users_read_own_transactions" on public.transactions;
 create policy "users_read_own_transactions"

@@ -22,6 +22,13 @@ export const aiProviders: Array<{
     keyUrl: 'https://platform.deepseek.com/api_keys',
   },
   {
+    id: 'qwen',
+    name: '通义千问 / 阿里云百炼',
+    description: '使用阿里云百炼 API Key，适合中文账本分析',
+    keyLabel: '百炼 API Key',
+    keyUrl: 'https://help.aliyun.com/zh/model-studio/get-api-key/',
+  },
+  {
     id: 'moonshotai-cn',
     name: 'Kimi / 月之暗面',
     description: '使用月之暗面开放平台额度',
@@ -57,7 +64,13 @@ interface GatewayResponse<T> {
   error?: string
 }
 
-const friendlyGatewayError = (message: string) => {
+export const friendlyGatewayError = (message: string) => {
+  if (/authentication fails|api key[^\n]*(invalid|incorrect)|invalid[_ ]api[_ ]key/i.test(message)) {
+    return 'API Key 无效或与当前服务商不匹配，请重新选择服务商并填写对应密钥。'
+  }
+  if (/insufficient (balance|quota)|quota exceeded|余额不足/i.test(message)) {
+    return '模型账户额度不足，请在服务商后台充值或检查可用额度。'
+  }
   if (/Failed to send a request|FunctionsFetchError|Load failed|Failed to fetch/i.test(message)) {
     return '暂时无法连接 AI 服务，请检查网络或稍后重试。'
   }
@@ -67,10 +80,23 @@ const friendlyGatewayError = (message: string) => {
   return message
 }
 
+const gatewayErrorMessage = async (error: unknown) => {
+  let message = error instanceof Error ? error.message : 'AI 服务发生未知错误。'
+  if (typeof error === 'object' && error && 'context' in error && error.context instanceof Response) {
+    try {
+      const payload = await error.context.clone().json() as { error?: unknown }
+      if (typeof payload.error === 'string' && payload.error.trim()) message = payload.error
+    } catch {
+      // Keep the SDK error when the Edge Function did not return JSON.
+    }
+  }
+  return friendlyGatewayError(message)
+}
+
 async function invokeGateway<T>(body: Record<string, unknown>): Promise<T> {
   if (!supabase) throw new Error('当前是体验模式，登录后才能配置 AI 模型。')
   const { data, error } = await supabase.functions.invoke<GatewayResponse<T>>('ai-gateway', { body })
-  if (error) throw new Error(friendlyGatewayError(error.message))
+  if (error) throw new Error(await gatewayErrorMessage(error))
   if (!data?.ok || data.data === undefined) {
     throw new Error(friendlyGatewayError(data?.error || 'AI 服务返回了无效结果。'))
   }

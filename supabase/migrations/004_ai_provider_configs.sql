@@ -53,3 +53,5 @@ alter table public.ai_usage_logs enable row level security;
 revoke all on table public.ai_usage_logs from anon, authenticated;
 grant insert on table public.ai_usage_logs to service_role;
 
+grant select on table public.transactions to service_role;
+

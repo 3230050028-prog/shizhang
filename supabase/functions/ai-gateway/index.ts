@@ -6,8 +6,13 @@ import { moonshotaiCnProvider } from 'npm:@earendil-works/pi-ai@1.0.0/providers/
 import { openaiProvider } from 'npm:@earendil-works/pi-ai@1.0.0/providers/openai'
 import { openrouterProvider } from 'npm:@earendil-works/pi-ai@1.0.0/providers/openrouter'
 
-const allowedProviders = ['openai', 'deepseek', 'moonshotai-cn', 'openrouter', 'kimi-coding'] as const
+const allowedProviders = ['openai', 'deepseek', 'qwen', 'moonshotai-cn', 'openrouter', 'kimi-coding'] as const
 type ProviderId = typeof allowedProviders[number]
+
+const qwenModels = [
+  { id: 'qwen-plus', name: '千问 Plus', provider: 'qwen', contextWindow: 1_000_000, supportsImages: false },
+  { id: 'qwen3.8-flash', name: '千问 3.8 Flash', provider: 'qwen', contextWindow: 1_000_000, supportsImages: false },
+]
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -121,6 +126,40 @@ const modelResponseText = (message: {
 }
 
 const callModel = async (config: ConfigRow, apiKey: string, prompt: string, systemPrompt: string) => {
+  if (config.provider === 'qwen') {
+    const baseUrl = apiKey.startsWith('sk-sp-')
+      ? 'https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1'
+      : 'https://dashscope.aliyuncs.com/compatible-mode/v1'
+    const response = await fetch(`${baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: config.model,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: prompt },
+        ],
+      }),
+    })
+    const payload = await response.json() as {
+      choices?: Array<{ message?: { content?: string } }>
+      usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number }
+      message?: string
+      error?: { message?: string }
+    }
+    if (!response.ok) throw new Error(payload.error?.message || payload.message || `千问请求失败（${response.status}）。`)
+    const text = payload.choices?.[0]?.message?.content?.trim()
+    if (!text) throw new Error('千问没有返回文字内容。')
+    return {
+      text,
+      usage: payload.usage ? {
+        input: payload.usage.prompt_tokens ?? 0,
+        output: payload.usage.completion_tokens ?? 0,
+        total: payload.usage.total_tokens ?? 0,
+        cost: undefined,
+      } : undefined,
+    }
+  }
   const model = models.getModel(config.provider, config.model)
   if (!model) throw new Error('当前模型不在可用目录中，请重新选择模型。')
   const result = await models.complete(model, {
@@ -176,7 +215,7 @@ Deno.serve(async (request) => {
 
     if (action === 'list-models') {
       if (!isProvider(body.provider)) return json(400, { ok: false, error: '不支持这个模型服务商。' })
-      const data = models.getModels(body.provider).map((model) => ({
+      const data = body.provider === 'qwen' ? qwenModels : models.getModels(body.provider).map((model) => ({
         id: model.id,
         name: model.name,
         provider: body.provider,
@@ -192,7 +231,10 @@ Deno.serve(async (request) => {
       const apiKey = typeof body.apiKey === 'string' ? body.apiKey.trim() : ''
       const isDefault = body.isDefault === true
       if (!model || model.length > 160) return json(400, { ok: false, error: '请选择有效的模型。' })
-      if (!models.getModel(body.provider, model)) return json(400, { ok: false, error: '当前模型不在可用目录中，请从列表重新选择。' })
+      const knownModel = body.provider === 'qwen'
+        ? qwenModels.some((item) => item.id === model)
+        : Boolean(models.getModel(body.provider, model))
+      if (!knownModel) return json(400, { ok: false, error: '当前模型不在可用目录中，请从列表重新选择。' })
 
       const { data: existing, error: existingError } = await admin
         .from('ai_provider_configs')
