@@ -85,6 +85,15 @@ const decryptCredential = async (
 const isProvider = (value: unknown): value is ProviderId =>
   typeof value === 'string' && allowedProviders.includes(value as ProviderId)
 
+const errorMessage = (error: unknown) => {
+  if (error instanceof Error) return error.message
+  if (typeof error === 'object' && error !== null && 'message' in error) {
+    const message = (error as { message?: unknown }).message
+    if (typeof message === 'string' && message.trim()) return message
+  }
+  return 'AI 服务发生未知错误。'
+}
+
 interface ConfigRow {
   id: string
   user_id: string
@@ -364,7 +373,7 @@ Deno.serve(async (request) => {
 
     return json(400, { ok: false, error: '不支持这个 AI 操作。' })
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'AI 服务发生未知错误。'
+    const message = errorMessage(error)
     console.error('[ai-gateway]', error)
     return json(500, { ok: false, error: message })
   }

@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { aiProviders, friendlyGatewayError, listAIModels } from '../src/lib/ai'
 
+const quotedValues = (text: string) => [...text.matchAll(/'([^']+)'/g)].map((match) => match[1])
+
 describe('AI model configuration catalog', () => {
   it('keeps provider ids unique and exposes a secure key-management link', () => {
     const ids = aiProviders.map((provider) => provider.id)
@@ -43,10 +45,28 @@ describe('AI model configuration catalog', () => {
 
   it('keeps the Qwen provider and endpoints in the Edge Function catalog', () => {
     const gateway = readFileSync(new URL('../supabase/functions/ai-gateway/index.ts', import.meta.url), 'utf8')
+    const migration = readFileSync(new URL('../supabase/migrations/005_add_qwen_provider.sql', import.meta.url), 'utf8')
 
     expect(gateway).toContain("'qwen'")
     expect(gateway).toContain('https://dashscope.aliyuncs.com/compatible-mode/v1')
     expect(gateway).toContain('https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1')
+    expect(gateway).toContain('const errorMessage = (error: unknown) =>')
+    expect(migration).toContain("'qwen'")
+    expect(migration).toContain('ai_provider_configs_provider_check')
+  })
+
+  it('keeps frontend, Edge Function, and database provider allowlists in sync', () => {
+    const gateway = readFileSync(new URL('../supabase/functions/ai-gateway/index.ts', import.meta.url), 'utf8')
+    const initialMigration = readFileSync(new URL('../supabase/migrations/004_ai_provider_configs.sql', import.meta.url), 'utf8')
+    const qwenMigration = readFileSync(new URL('../supabase/migrations/005_add_qwen_provider.sql', import.meta.url), 'utf8')
+    const expected = aiProviders.map((provider) => provider.id).sort()
+    const edgeList = gateway.match(/const allowedProviders = \[([^\]]+)] as const/)?.[1] ?? ''
+    const initialList = initialMigration.match(/check \(provider in \(([^)]+)\)\)/i)?.[1] ?? ''
+    const updatedList = qwenMigration.match(/check \(provider in \(([^)]+)\)\)/i)?.[1] ?? ''
+
+    expect(quotedValues(edgeList).sort()).toEqual(expected)
+    expect(quotedValues(initialList).sort()).toEqual(expected)
+    expect(quotedValues(updatedList).sort()).toEqual(expected)
   })
 
   it('allows only the Edge Function service role to manage encrypted AI credentials', () => {

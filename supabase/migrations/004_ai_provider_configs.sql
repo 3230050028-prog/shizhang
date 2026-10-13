@@ -5,7 +5,7 @@
 create table if not exists public.ai_provider_configs (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
-  provider text not null check (provider in ('openai', 'deepseek', 'moonshotai-cn', 'openrouter', 'kimi-coding')),
+  provider text not null check (provider in ('openai', 'deepseek', 'qwen', 'moonshotai-cn', 'openrouter', 'kimi-coding')),
   model text not null check (char_length(model) between 1 and 160),
   api_key_ciphertext text not null,
   api_key_iv text not null,
