@@ -45,11 +45,12 @@ describe('AI model configuration catalog', () => {
 
   it('keeps the Qwen provider and endpoints in the Edge Function catalog', () => {
     const gateway = readFileSync(new URL('../supabase/functions/ai-gateway/index.ts', import.meta.url), 'utf8')
+    const qwen = readFileSync(new URL('../supabase/functions/ai-gateway/qwen.ts', import.meta.url), 'utf8')
     const migration = readFileSync(new URL('../supabase/migrations/005_add_qwen_provider.sql', import.meta.url), 'utf8')
 
     expect(gateway).toContain("'qwen'")
-    expect(gateway).toContain('https://dashscope.aliyuncs.com/compatible-mode/v1')
-    expect(gateway).toContain('https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1')
+    expect(qwen).toContain('https://dashscope.aliyuncs.com/compatible-mode/v1')
+    expect(qwen).toContain('https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1')
     expect(gateway).toContain('const errorMessage = (error: unknown) =>')
     expect(migration).toContain("'qwen'")
     expect(migration).toContain('ai_provider_configs_provider_check')

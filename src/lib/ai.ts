@@ -88,12 +88,21 @@ export const friendlyGatewayError = (message: string) => {
 const gatewayErrorMessage = async (error: unknown) => {
   let message = error instanceof Error ? error.message : 'AI 服务发生未知错误。'
   if (typeof error === 'object' && error && 'context' in error && error.context instanceof Response) {
+    const { status } = error.context
+    let code = ''
+    message = `AI 服务暂时不可用（HTTP ${status}），请稍后重试。`
     try {
-      const payload = await error.context.clone().json() as { error?: unknown }
+      const payload = await error.context.clone().json() as { error?: unknown; message?: unknown; code?: unknown }
       if (typeof payload.error === 'string' && payload.error.trim()) message = payload.error
+      else if (typeof payload.message === 'string' && payload.message.trim()) message = payload.message
+      if (typeof payload.code === 'string') code = payload.code
     } catch {
-      // Keep the SDK error when the Edge Function did not return JSON.
+      // Non-JSON gateway responses still need an actionable status.
     }
+    if (status === 504 || code === 'GATEWAY_TIMEOUT') return 'AI 响应超时，请稍后重试，或切换其他模型。'
+    if (status === 546 || code === 'WORKER_LIMIT') return 'AI 云端触及资源限制，请稍后重试；持续出现时需要检查云端日志。'
+    if (code === 'BOOT_ERROR') return 'AI 云端启动失败，需要检查云函数部署。'
+    if (status === 401) return 'AI 服务未能验证登录状态，请重新登录后再试。'
   }
   return friendlyGatewayError(message)
 }
@@ -129,8 +138,9 @@ export const removeAIConfig = (provider: AIProviderId) =>
 export const testAIConfig = (provider: AIProviderId) =>
   invokeGateway<{ message: string; checkedAt: string }>({ action: 'test-config', provider })
 
-export const askLedgerAI = (messages: AIChatMessage[]) =>
+export const askLedgerAI = (messages: AIChatMessage[], selectedMonth: string) =>
   invokeGateway<{ answer: string; provider: AIProviderId; model: string; usage?: AIUsage }>({
     action: 'chat',
     messages,
+    selectedMonth,
   })

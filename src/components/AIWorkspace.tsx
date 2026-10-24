@@ -29,6 +29,7 @@ import type { AIChatMessage, AIModelOption, AIProviderConfig, AIProviderId, AIUs
 
 interface AIWorkspaceProps {
   demo?: boolean
+  month: string
   onClose: () => void
 }
 
@@ -41,7 +42,7 @@ const starterQuestions = [
 const providerName = (id: AIProviderId) =>
   aiProviders.find((item) => item.id === id)?.name ?? id
 
-export function AIWorkspace({ demo, onClose }: AIWorkspaceProps) {
+export function AIWorkspace({ demo, month, onClose }: AIWorkspaceProps) {
   const [tab, setTab] = useState<'assistant' | 'settings'>('assistant')
   const [configs, setConfigs] = useState<AIProviderConfig[]>([])
   const [loadingConfigs, setLoadingConfigs] = useState(!demo)
@@ -196,7 +197,7 @@ export function AIWorkspace({ demo, onClose }: AIWorkspaceProps) {
     setChatError('')
     setAnswering(true)
     try {
-      const result = await askLedgerAI(nextMessages.slice(-10))
+      const result = await askLedgerAI(nextMessages.slice(-10), month)
       setMessages((current) => [...current, { role: 'assistant', content: result.answer }])
       setLastUsage(result.usage ?? null)
     } catch (error) {
@@ -237,7 +238,7 @@ export function AIWorkspace({ demo, onClose }: AIWorkspaceProps) {
                 <div className="ai-welcome">
                   <span><Bot size={28} /></span>
                   <h3>想了解哪一笔花销？</h3>
-                  <p>最近 12 个月的账目会发送给你选择的模型服务商用于本次回答；AI 不会替你修改或删除记录。</p>
+                  <p>默认分析页面所选月份（{month}），也可以指定其他月份。相关账目会发送给你选择的模型服务商；AI 不会替你修改或删除记录。</p>
                   <div className="ai-starters">
                     {starterQuestions.map((item) => (
                       <button key={item} type="button" disabled={!defaultConfig || answering} onClick={() => void sendQuestion(item)}>{item}<ChevronRight size={14} /></button>

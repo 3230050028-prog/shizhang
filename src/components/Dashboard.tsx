@@ -573,7 +573,7 @@ export function Dashboard({
       )}
       {showAI && (
         <Suspense fallback={<div className="modal-backdrop"><p className="loading-text">正在打开 AI 助手…</p></div>}>
-          <AIWorkspace demo={demo} onClose={() => setShowAI(false)} />
+              <AIWorkspace demo={demo} month={month} onClose={() => setShowAI(false)} />
         </Suspense>
       )}
     </div>
