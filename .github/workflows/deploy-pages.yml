@@ -39,6 +39,7 @@ jobs:
       - name: Build
         run: npm run build
         env:
+          VITE_APP_VERSION: ${{ github.sha }}
           VITE_SUPABASE_URL: https://vbsjhhhtjuujpbnxlfsn.supabase.co
           VITE_SUPABASE_PUBLISHABLE_KEY: sb_publishable_Mg0g2_PVOQYUXWHX5d9JTQ_uQpvKYwy
 

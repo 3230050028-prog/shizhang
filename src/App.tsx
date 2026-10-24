@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { AuthScreen } from './components/AuthScreen'
+import { AuthConnectionHelp } from './components/AuthConnectionHelp'
 import { Dashboard } from './components/Dashboard'
 import { PasswordRecovery } from './components/PasswordRecovery'
 import { SplashScreen } from './components/SplashScreen'
@@ -637,6 +638,7 @@ function App() {
           {!recoveryMode && (
             <button className="forgot-button" type="button" onClick={() => setAuthError('')}>改用邮箱密码登录</button>
           )}
+          <AuthConnectionHelp />
         </section>
       </main>
     )

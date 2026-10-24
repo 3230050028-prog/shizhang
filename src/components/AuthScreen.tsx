@@ -4,6 +4,7 @@ import { buildPasswordRecoveryRedirect } from '../lib/passwordRecovery'
 import { authErrorMessage } from '../lib/authSession'
 import { supabase } from '../lib/supabase'
 import { withTimeout } from '../lib/timeout'
+import { AuthConnectionHelp } from './AuthConnectionHelp'
 
 const translateAuthError = (message: string) => {
   const normalized = message.toLowerCase()
@@ -164,6 +165,7 @@ export function AuthScreen() {
             )}
 
             {message && <p className="form-message" role="alert">{message}</p>}
+            {message && /连接|网络|超时/.test(message) && <AuthConnectionHelp />}
 
             {verificationEmail && (
               <div className="verification-message" role="status">
