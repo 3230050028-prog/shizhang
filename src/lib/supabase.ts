@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { createAuthFetch } from './authFetch'
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined
 const supabasePublishableKey = import.meta.env
@@ -9,6 +10,9 @@ export const isSupabaseConfigured = Boolean(
 )
 
 export const supabase = isSupabaseConfigured
-  ? createClient(supabaseUrl!, supabasePublishableKey!)
+  ? createClient(supabaseUrl!, supabasePublishableKey!, {
+      auth: { persistSession: true, autoRefreshToken: true },
+      global: { fetch: createAuthFetch(supabaseUrl!) },
+    })
   : null
 

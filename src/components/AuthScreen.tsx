@@ -1,10 +1,13 @@
 import { useState, type FormEvent } from 'react'
 import { ArrowRight, CheckCircle2, Eye, EyeOff, Leaf, MailCheck } from 'lucide-react'
 import { buildPasswordRecoveryRedirect } from '../lib/passwordRecovery'
+import { authErrorMessage } from '../lib/authSession'
 import { supabase } from '../lib/supabase'
+import { withTimeout } from '../lib/timeout'
 
 const translateAuthError = (message: string) => {
   const normalized = message.toLowerCase()
+  if (/fetch|network|load failed|timeout|timed out|abort|超时/.test(normalized)) return authErrorMessage({ message })
   if (normalized.includes('email not confirmed')) return '邮箱尚未验证。请先打开注册邮件，点击“确认邮箱”链接后再登录。'
   if (normalized.includes('invalid login credentials')) return '邮箱或密码不正确，请检查后重试。'
   if (normalized.includes('user already registered')) return '这个邮箱已经注册过，请直接登录或使用“忘记密码”。'
@@ -33,18 +36,18 @@ export function AuthScreen() {
 
     let result
     try {
-      result = mode === 'login'
-        ? await supabase.auth.signInWithPassword({ email, password })
-        : await supabase.auth.signUp({
-            email,
+      result = await withTimeout(mode === 'login'
+        ? supabase.auth.signInWithPassword({ email: email.trim(), password })
+        : supabase.auth.signUp({
+            email: email.trim(),
             password,
             options: {
               emailRedirectTo: new URL(import.meta.env.BASE_URL, window.location.origin).toString(),
             },
-          })
-    } catch {
+          }), 25_000, '连接账号服务超时，请检查网络后重试。')
+    } catch (error) {
       setLoading(false)
-      setMessage('网络连接失败，请检查网络后重试。')
+      setMessage(authErrorMessage(error))
       return
     }
 
@@ -69,14 +72,14 @@ export function AuthScreen() {
     setMessage('')
     try {
       const normalizedEmail = email.trim()
-      const { error } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
+      const { error } = await withTimeout(supabase.auth.resetPasswordForEmail(normalizedEmail, {
         redirectTo: buildPasswordRecoveryRedirect(window.location.origin, import.meta.env.BASE_URL),
-      })
+      }), 25_000, '连接账号服务超时，请检查网络后重试。')
       setMessage(error
         ? translateAuthError(error.message)
         : `如果 ${normalizedEmail} 已注册，几分钟内会收到重置邮件。请点击邮件中的链接，并检查垃圾邮件箱。`)
-    } catch {
-      setMessage('网络连接失败，请稍后重试。')
+    } catch (error) {
+      setMessage(authErrorMessage(error))
     } finally {
       setLoading(false)
     }
@@ -125,6 +128,8 @@ export function AuthScreen() {
               <span className="auth-field-label">邮箱地址 <small>用于接收确认邮件</small></span>
               <input
                 type="email"
+                autoComplete="username"
+                autoCapitalize="none"
                 placeholder="name@example.com"
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
@@ -136,6 +141,7 @@ export function AuthScreen() {
               <span className="password-field">
                 <input
                   type={showPassword ? 'text' : 'password'}
+                  autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
                   placeholder="至少 6 位字符"
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
@@ -157,7 +163,7 @@ export function AuthScreen() {
               <button className="forgot-button" type="button" onClick={requestPasswordReset} disabled={loading}>忘记密码？</button>
             )}
 
-            {message && <p className="form-message">{message}</p>}
+            {message && <p className="form-message" role="alert">{message}</p>}
 
             {verificationEmail && (
               <div className="verification-message" role="status">
@@ -179,7 +185,7 @@ export function AuthScreen() {
 
           <p className="auth-switch">
             {mode === 'login' ? '还没有账号？' : '已经有账号？'}
-            <button type="button" onClick={switchMode}>
+            <button type="button" onClick={switchMode} disabled={loading}>
               {mode === 'login' ? '免费注册' : '返回登录'}
             </button>
           </p>

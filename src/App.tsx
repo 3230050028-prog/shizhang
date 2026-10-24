@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { AuthScreen } from './components/AuthScreen'
 import { Dashboard } from './components/Dashboard'
@@ -6,6 +6,7 @@ import { PasswordRecovery } from './components/PasswordRecovery'
 import { SplashScreen } from './components/SplashScreen'
 import { demoTransactions } from './data'
 import { BatchSaveError, saveInBatches } from './lib/batchSave'
+import { authErrorMessage, watchAuthSession } from './lib/authSession'
 import { toLocalMonth } from './lib/date'
 import { clearPasswordRecoveryRequest, readPasswordRecoveryRequest } from './lib/passwordRecovery'
 import { isSupabaseConfigured, supabase } from './lib/supabase'
@@ -72,6 +73,8 @@ function App() {
   const cloudEnabled = isSupabaseConfigured && !(import.meta.env.DEV && new URLSearchParams(window.location.search).has('demo'))
   const [showSplash, setShowSplash] = useState(true)
   const [session, setSession] = useState<Session | null>(null)
+  const sessionUserId = session?.user.id
+  const previousUserId = useRef<string | undefined>(undefined)
   const [authLoading, setAuthLoading] = useState(cloudEnabled)
   const [authError, setAuthError] = useState('')
   const [authAttempt, setAuthAttempt] = useState(0)
@@ -99,43 +102,52 @@ function App() {
   useEffect(() => {
     if (!cloudEnabled || !supabase) return
 
-    void withTimeout(
-      supabase.auth.getSession(),
-      12_000,
-      '连接账号服务超时，请检查网络后重试。',
-    ).then(({ data, error }) => {
-      setSession(data.session)
-      setAuthLoading(false)
-      setAuthError('')
-      setDataLoading(Boolean(data.session))
-      if (initialRecoveryRequest.requested && !data.session) {
-        setRecoveryError(initialRecoveryRequest.error || error?.message || '这个重置链接无效或已经过期，请重新申请。')
-      }
-    }).catch((error) => {
-      setAuthLoading(false)
-      setAuthError(errorMessage(error))
-      if (initialRecoveryRequest.requested) setRecoveryError('无法验证重置链接，请检查网络后重新打开邮件链接。')
-    })
-
-    const { data: listener } = supabase.auth.onAuthStateChange((event, nextSession) => {
+    return watchAuthSession(supabase.auth, (nextSession, event) => {
       if (event === 'PASSWORD_RECOVERY') {
         setRecoveryMode(true)
         setRecoveryError('')
       }
+      if (previousUserId.current !== nextSession?.user.id) {
+        setDataLoading(Boolean(nextSession))
+        previousUserId.current = nextSession?.user.id
+      }
       setSession(nextSession)
       setAuthLoading(false)
       setAuthError('')
-      setDataLoading(Boolean(nextSession))
       if (!nextSession) {
+        setDataLoading(false)
         setTransactions([])
         setBudgets([])
         setSavedCategories([])
         setSavedAccounts([])
+        if (initialRecoveryRequest.requested) {
+          setRecoveryError(initialRecoveryRequest.error || '这个重置链接无效或已经过期，请重新申请。')
+        }
       }
+    }, (error) => {
+      setAuthLoading(false)
+      setAuthError(authErrorMessage(error))
+      if (initialRecoveryRequest.requested) setRecoveryError('无法验证重置链接，请检查网络后重新打开邮件链接。')
     })
-
-    return () => listener.subscription.unsubscribe()
   }, [authAttempt, cloudEnabled])
+
+  useEffect(() => {
+    if (!cloudEnabled) return
+    const reconnect = () => {
+      if (document.visibilityState === 'hidden' || !navigator.onLine || !authError) return
+      setAuthAttempt((value) => value + 1)
+    }
+    window.addEventListener('online', reconnect)
+    document.addEventListener('visibilitychange', reconnect)
+    // Supabase caches a failed refresh for 60 seconds. Give a recovered
+    // connection one bounded retry after that cooldown without polling.
+    const timer = window.setTimeout(reconnect, 65_000)
+    return () => {
+      window.clearTimeout(timer)
+      window.removeEventListener('online', reconnect)
+      document.removeEventListener('visibilitychange', reconnect)
+    }
+  }, [authError, cloudEnabled])
 
   const clearPasswordRecoveryLocation = () => {
     window.history.replaceState(null, '', clearPasswordRecoveryRequest(window.location.href))
@@ -145,7 +157,7 @@ function App() {
 
   const cancelPasswordRecovery = async () => {
     try {
-      if (supabase) await supabase.auth.signOut()
+      if (supabase) await supabase.auth.signOut({ scope: 'local' })
     } finally {
       clearPasswordRecoveryLocation()
     }
@@ -164,7 +176,7 @@ function App() {
   }, [cloudEnabled, savedAccounts])
 
   useEffect(() => {
-    if (!session || !supabase) return
+    if (!sessionUserId || !supabase) return
 
     let active = true
     void (async () => {
@@ -197,7 +209,7 @@ function App() {
     return () => {
       active = false
     }
-  }, [session, loadAttempt])
+  }, [sessionUserId, loadAttempt])
 
   const persistCategory = async (input: TransactionInput) => {
     const existing = savedCategories.find((item) => item.type === input.type && item.name === input.category)
@@ -610,6 +622,7 @@ function App() {
           <span className="brand-mark">拾</span>
           <h1>暂时无法连接拾账</h1>
           <p>{authError}</p>
+          <p>连接异常不代表账号已退出。恢复网络后会尝试重新连接，也可以点击下方按钮重试。</p>
           <button
             className="primary-button"
             type="button"
@@ -621,6 +634,9 @@ function App() {
           >
             重新连接
           </button>
+          {!recoveryMode && (
+            <button className="forgot-button" type="button" onClick={() => setAuthError('')}>改用邮箱密码登录</button>
+          )}
         </section>
       </main>
     )
@@ -651,7 +667,7 @@ function App() {
       onSaveBudget={saveBudget}
       loadError={loadError}
       onRetry={() => { setDataLoading(true); setLoadAttempt((value) => value + 1) }}
-      onSignOut={session && supabase ? async () => { await supabase!.auth.signOut() } : undefined}
+      onSignOut={session && supabase ? async () => { await supabase!.auth.signOut({ scope: 'local' }) } : undefined}
     />
   )
 }
