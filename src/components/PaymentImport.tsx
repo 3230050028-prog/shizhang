@@ -95,6 +95,7 @@ export function PaymentImport({ transactions, onClose, onImport, onReplaceFromSt
   const loadFile = async (file: File, password?: string) => {
     setError('')
     setImported(null)
+    setCorrectedDates(null)
     try {
       const result = await readPaymentStatement(file, password)
       setSourceRows(result.rows)
@@ -109,7 +110,6 @@ export function PaymentImport({ transactions, onClose, onImport, onReplaceFromSt
       setRows(uniqueRows.slice(0, 500))
       setDuplicateRows(foundDuplicates.slice(0, 500))
       setDateCorrections(corrections.slice(0, 500))
-      setCorrectedDates(null)
       setSkipped(result.skipped + Math.max(0, uniqueRows.length - 500))
       setDuplicates(foundDuplicates.length)
       setShowDuplicatePreview(!uniqueRows.length && foundDuplicates.length > 0)
@@ -264,10 +264,9 @@ export function PaymentImport({ transactions, onClose, onImport, onReplaceFromSt
       return
     }
     setCorrectedDates(updates.length)
+    setDuplicateRows((current) => [...current, ...dateCorrections.map(({ incoming }) => incoming)])
+    setDuplicates((current) => current + dateCorrections.length)
     setDateCorrections([])
-    setRows([])
-    setDuplicateRows([])
-    setDuplicates(0)
     setShowDuplicatePreview(false)
     setCorrectingDates(false)
   }
@@ -339,6 +338,8 @@ export function PaymentImport({ transactions, onClose, onImport, onReplaceFromSt
     <p className="import-memory-note">已撤销所选导入批次，共删除 {undoneImport} 笔记录。</p>
   ) : null
 
+  const finished = imported !== null || (correctedDates !== null && rows.length === 0)
+
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
       <section className="transaction-modal import-modal" role="dialog" aria-modal="true" aria-labelledby="import-title" onMouseDown={(event) => event.stopPropagation()}>
@@ -365,19 +366,22 @@ export function PaymentImport({ transactions, onClose, onImport, onReplaceFromSt
         </header>
 
         {importHistoryPanel}
-        {imported === null && correctedDates === null && duplicateCleanupPanel}
+        {!finished && duplicateCleanupPanel}
 
-        {imported !== null || correctedDates !== null ? (
+        {finished ? (
           <div className="import-success">
             <CheckCircle2 size={42} />
             <h3>{imported !== null ? `成功导入 ${imported} 笔` : `已修正 ${correctedDates} 笔日期`}</h3>
-            <p>{imported !== null ? '重复记录已自动跳过，账本统计已经更新。' : '日期修正已经完成，不会再显示“确认导入”。'}</p>
+            <p>{imported !== null ? '重复记录已自动跳过，账本统计已经更新。' : '已有记录的日期已更新，没有新账目需要导入。'}</p>
             {duplicateCleanupPanel}
             {error && <p className="inline-error">{error}</p>}
             <button className="primary-button" onClick={onClose}>完成并返回账本</button>
           </div>
         ) : (
           <>
+            {correctedDates !== null && (
+              <p className="import-memory-note" role="status">已修正 {correctedDates} 笔日期，还有 {rows.length} 笔新账目待导入。请继续点击下方“确认导入”，无需重新选择文件。</p>
+            )}
             {showGuide && (
               <section className="import-guide" aria-label="账单导入教程">
                 <div className="import-guide-intro">
@@ -543,7 +547,7 @@ export function PaymentImport({ transactions, onClose, onImport, onReplaceFromSt
                     </div>
                   ))}
                 </div>
-                <button type="button" disabled={correctingDates} onClick={() => void correctDates()}>
+                <button type="button" disabled={correctingDates || importing || rebuilding} onClick={() => void correctDates()}>
                   {correctingDates ? `正在修正 ${correctionProgress} / ${dateCorrections.length}` : `确认修正 ${dateCorrections.length} 笔日期`}
                 </button>
               </div>
@@ -556,7 +560,7 @@ export function PaymentImport({ transactions, onClose, onImport, onReplaceFromSt
                 <small>正在保存 {importProgress} / {rows.length} 笔，请不要关闭页面</small>
               </div>
             )}
-            <button className="primary-button modal-submit" disabled={!rows.length || importing} onClick={() => void importRows()}>
+            <button className="primary-button modal-submit" disabled={!rows.length || importing || correctingDates || rebuilding} onClick={() => void importRows()}>
               <Upload size={18} />{importing ? `正在导入 ${importProgress} / ${rows.length}` : `确认导入 ${rows.length} 笔`}
             </button>
           </>
