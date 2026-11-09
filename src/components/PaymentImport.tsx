@@ -151,6 +151,15 @@ export function PaymentImport({ transactions, onClose, onImport, onReplaceFromSt
     void loadFile(selectedFile, zipPassword)
   }
 
+  const rememberImportBatch = (batch: ImportBatch) => {
+    try {
+      setImportHistory(saveImportBatch(batch))
+    } catch {
+      setImportHistory((current) => [batch, ...current].slice(0, 10))
+      setError('账目已导入，但导入历史未能保存到本机。刷新后可能无法从“最近导入”撤销本次操作。')
+    }
+  }
+
   const importRows = async () => {
     setImporting(true)
     setImportProgress(0)
@@ -172,7 +181,7 @@ export function PaymentImport({ transactions, onClose, onImport, onReplaceFromSt
         expenseAmount: totals.expense,
         incomeAmount: totals.income,
       }
-      setImportHistory(saveImportBatch(batch))
+      rememberImportBatch(batch)
       setUndoneImport(null)
     }
     setImported(result.saved ?? inputs.length)
@@ -228,7 +237,7 @@ export function PaymentImport({ transactions, onClose, onImport, onReplaceFromSt
         expenseAmount: totals.expense,
         incomeAmount: totals.income,
       }
-      setImportHistory(saveImportBatch(batch))
+      rememberImportBatch(batch)
     }
     setImported(result.saved ?? rebuildPlan.replacements.length)
     setUndoneImport(null)
@@ -246,7 +255,12 @@ export function PaymentImport({ transactions, onClose, onImport, onReplaceFromSt
       setUndoingBatch('')
       return
     }
-    setImportHistory(removeImportBatch(batch.importedAt))
+    try {
+      setImportHistory(removeImportBatch(batch.importedAt))
+    } catch {
+      setImportHistory((current) => current.filter((item) => item.importedAt !== batch.importedAt))
+      setError('账目已撤销，但本机导入历史未能更新。')
+    }
     setUndoneImport(ids.length)
     setImported(null)
     setUndoingBatch('')

@@ -47,8 +47,8 @@ export const parseLegacyImportBatch = (value: string | null): ImportBatch | null
 
 export const readImportHistory = () => {
   try {
-    const history = parseImportHistory(window.localStorage.getItem(historyStorageKey))
-    if (history.length) return history
+    const stored = window.localStorage.getItem(historyStorageKey)
+    if (stored !== null) return parseImportHistory(stored)
     const legacy = parseLegacyImportBatch(window.localStorage.getItem(legacyStorageKey))
     return legacy ? [legacy] : []
   } catch {
@@ -56,28 +56,43 @@ export const readImportHistory = () => {
   }
 }
 
+const readImportHistoryForWrite = (): ImportBatch[] => {
+  const stored = window.localStorage.getItem(historyStorageKey)
+  if (stored !== null) {
+    const parsed: unknown = JSON.parse(stored)
+    if (!Array.isArray(parsed)) throw new Error('导入历史格式错误')
+    const history = parsed.map(normalizeBatch)
+    if (history.some((batch) => batch === null)) throw new Error('导入历史包含损坏记录')
+    return history as ImportBatch[]
+  }
+
+  const legacyStored = window.localStorage.getItem(legacyStorageKey)
+  if (legacyStored === null) return []
+  const legacy = normalizeBatch(JSON.parse(legacyStored) as unknown)
+  if (!legacy) throw new Error('旧版导入历史格式错误')
+  return [legacy]
+}
+
 const writeImportHistory = (history: ImportBatch[]) => {
   window.localStorage.setItem(historyStorageKey, JSON.stringify(history.slice(0, historyLimit)))
-  window.localStorage.removeItem(legacyStorageKey)
+  try {
+    window.localStorage.removeItem(legacyStorageKey)
+  } catch {
+    // 新历史已成功写入，旧键清理失败不影响后续读取。
+  }
 }
 
 export const saveImportBatch = (batch: ImportBatch) => {
-  try {
-    const history = readImportHistory().filter((item) => item.importedAt !== batch.importedAt)
-    const next = [normalizeBatch(batch), ...history].filter((item): item is ImportBatch => Boolean(item))
-    writeImportHistory(next)
-    return next.slice(0, historyLimit)
-  } catch {
-    return [batch]
-  }
+  const normalized = normalizeBatch(batch)
+  if (!normalized) throw new Error('本次导入记录格式错误')
+  const history = readImportHistoryForWrite().filter((item) => item.importedAt !== batch.importedAt)
+  const next = [normalized, ...history].slice(0, historyLimit)
+  writeImportHistory(next)
+  return next
 }
 
 export const removeImportBatch = (importedAt: string) => {
-  try {
-    const next = readImportHistory().filter((batch) => batch.importedAt !== importedAt)
-    writeImportHistory(next)
-    return next
-  } catch {
-    return []
-  }
+  const next = readImportHistoryForWrite().filter((batch) => batch.importedAt !== importedAt)
+  writeImportHistory(next)
+  return next
 }

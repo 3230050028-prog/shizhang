@@ -9,14 +9,12 @@ import { demoTransactions } from './data'
 import { BatchSaveError, saveInBatches } from './lib/batchSave'
 import { authErrorMessage, watchAuthSession } from './lib/authSession'
 import { toLocalMonth } from './lib/date'
+import { demoKeys, isDemoAccount, isDemoBudget, isDemoTransaction, readDemoList, writeDemoList } from './lib/demoStore'
 import { clearPasswordRecoveryRequest, readPasswordRecoveryRequest } from './lib/passwordRecovery'
 import { isSupabaseConfigured, supabase } from './lib/supabase'
 import { withTimeout } from './lib/timeout'
 import type { ActionResult, Budget, SavedAccount, SavedCategory, Transaction, TransactionInput } from './types'
 
-const demoStorageKey = 'shizhang-demo-transactions'
-const demoBudgetStorageKey = 'shizhang-demo-budgets'
-const demoAccountStorageKey = 'shizhang-demo-accounts'
 const initialRecoveryRequest = readPasswordRecoveryRequest(window.location.href)
 
 const normalizeTransaction = (transaction: Transaction): Transaction => ({
@@ -24,40 +22,12 @@ const normalizeTransaction = (transaction: Transaction): Transaction => ({
   account: transaction.account || '未分类',
 })
 
-function loadDemoTransactions() {
-  try {
-    const stored = localStorage.getItem(demoStorageKey)
-    return stored
-      ? (JSON.parse(stored) as Transaction[]).map(normalizeTransaction)
-      : demoTransactions
-  } catch {
-    return demoTransactions
-  }
-}
-
-function loadDemoAccounts(): SavedAccount[] {
-  try {
-    const stored = localStorage.getItem(demoAccountStorageKey)
-    return stored ? JSON.parse(stored) as SavedAccount[] : []
-  } catch {
-    return []
-  }
-}
-
-function loadDemoBudgets(): Budget[] {
-  try {
-    const stored = localStorage.getItem(demoBudgetStorageKey)
-    if (stored) return JSON.parse(stored) as Budget[]
-  } catch {
-    // Fall back to a starter budget when local demo data is invalid.
-  }
-  return [{
-    id: 'demo-budget',
-    month: `${toLocalMonth()}-01`,
-    category: '全部',
-    amount: 3000,
-  }]
-}
+const starterBudgets: Budget[] = [{
+  id: 'demo-budget',
+  month: `${toLocalMonth()}-01`,
+  category: '全部',
+  amount: 3000,
+}]
 
 const errorMessage = (error: unknown) => {
   if (error instanceof Error) return error.message
@@ -72,6 +42,22 @@ const failure = (prefix: string, error: unknown): ActionResult => ({
 
 function App() {
   const cloudEnabled = isSupabaseConfigured && !(import.meta.env.DEV && new URLSearchParams(window.location.search).has('demo'))
+  const [demoSnapshot] = useState(() => cloudEnabled ? null : {
+    transactions: readDemoList(demoKeys.transactions, demoTransactions, isDemoTransaction),
+    budgets: readDemoList(demoKeys.budgets, starterBudgets, isDemoBudget),
+    accounts: readDemoList(demoKeys.accounts, [] as SavedAccount[], isDemoAccount),
+  })
+  const demoReadIssue = demoSnapshot && Object.values(demoSnapshot).some((item) => item.corrupted || item.unavailable)
+  const [demoStorageWarning, setDemoStorageWarning] = useState(() => {
+    if (!demoSnapshot) return ''
+    if (Object.values(demoSnapshot).some((item) => item.corrupted)) {
+      return '演示账本的本地数据已损坏。已暂停自动保存，避免覆盖原数据。'
+    }
+    if (Object.values(demoSnapshot).some((item) => item.unavailable)) {
+      return '浏览器无法读取演示账本的本地数据。当前操作无法可靠保存。'
+    }
+    return ''
+  })
   const [showSplash, setShowSplash] = useState(true)
   const [session, setSession] = useState<Session | null>(null)
   const sessionUserId = session?.user.id
@@ -85,14 +71,14 @@ function App() {
   const [recoveryMode, setRecoveryMode] = useState(initialRecoveryRequest.requested)
   const [recoveryError, setRecoveryError] = useState(initialRecoveryRequest.error)
   const [transactions, setTransactions] = useState<Transaction[]>(() =>
-    cloudEnabled ? [] : loadDemoTransactions(),
+    demoSnapshot ? demoSnapshot.transactions.data.map(normalizeTransaction) : [],
   )
   const [budgets, setBudgets] = useState<Budget[]>(() =>
-    cloudEnabled ? [] : loadDemoBudgets(),
+    demoSnapshot ? demoSnapshot.budgets.data : [],
   )
   const [savedCategories, setSavedCategories] = useState<SavedCategory[]>([])
   const [savedAccounts, setSavedAccounts] = useState<SavedAccount[]>(() =>
-    cloudEnabled ? [] : loadDemoAccounts(),
+    demoSnapshot ? demoSnapshot.accounts.data : [],
   )
 
   useEffect(() => {
@@ -165,16 +151,17 @@ function App() {
   }
 
   useEffect(() => {
-    if (!cloudEnabled) localStorage.setItem(demoStorageKey, JSON.stringify(transactions))
-  }, [cloudEnabled, transactions])
-
-  useEffect(() => {
-    if (!cloudEnabled) localStorage.setItem(demoBudgetStorageKey, JSON.stringify(budgets))
-  }, [budgets, cloudEnabled])
-
-  useEffect(() => {
-    if (!cloudEnabled) localStorage.setItem(demoAccountStorageKey, JSON.stringify(savedAccounts))
-  }, [cloudEnabled, savedAccounts])
+    if (cloudEnabled || demoReadIssue) return
+    const saved = [
+      writeDemoList(demoKeys.transactions, transactions),
+      writeDemoList(demoKeys.budgets, budgets),
+      writeDemoList(demoKeys.accounts, savedAccounts),
+    ]
+    const timer = window.setTimeout(() => {
+      setDemoStorageWarning(saved.every(Boolean) ? '' : '演示账本未能保存到本机。请检查浏览器存储空间，暂勿关闭页面。')
+    }, 0)
+    return () => window.clearTimeout(timer)
+  }, [cloudEnabled, demoReadIssue, transactions, budgets, savedAccounts])
 
   useEffect(() => {
     if (!sessionUserId || !supabase) return
@@ -651,26 +638,29 @@ function App() {
   if (cloudEnabled && !session) return <AuthScreen />
 
   return (
-    <Dashboard
-      transactions={transactions}
-      budgets={budgets}
-      savedCategories={savedCategories}
-      savedAccounts={savedAccounts}
-      email={session?.user.email}
-      demo={!cloudEnabled}
-      loading={dataLoading}
-      onAdd={addTransaction}
-      onAddBatch={addTransactions}
-      onReplaceFromStatement={replaceTransactionsFromStatement}
-      onCorrectDates={correctTransactionDates}
-      onDeleteDuplicates={deleteDuplicateTransactions}
-      onUpdate={updateTransaction}
-      onDelete={deleteTransaction}
-      onSaveBudget={saveBudget}
-      loadError={loadError}
-      onRetry={() => { setDataLoading(true); setLoadAttempt((value) => value + 1) }}
-      onSignOut={session && supabase ? async () => { await supabase!.auth.signOut({ scope: 'local' }) } : undefined}
-    />
+    <>
+      {demoStorageWarning && <div className="demo-storage-warning" role="alert">{demoStorageWarning}</div>}
+      <Dashboard
+        transactions={transactions}
+        budgets={budgets}
+        savedCategories={savedCategories}
+        savedAccounts={savedAccounts}
+        email={session?.user.email}
+        demo={!cloudEnabled}
+        loading={dataLoading}
+        onAdd={addTransaction}
+        onAddBatch={addTransactions}
+        onReplaceFromStatement={replaceTransactionsFromStatement}
+        onCorrectDates={correctTransactionDates}
+        onDeleteDuplicates={deleteDuplicateTransactions}
+        onUpdate={updateTransaction}
+        onDelete={deleteTransaction}
+        onSaveBudget={saveBudget}
+        loadError={loadError}
+        onRetry={() => { setDataLoading(true); setLoadAttempt((value) => value + 1) }}
+        onSignOut={session && supabase ? async () => { await supabase!.auth.signOut({ scope: 'local' }) } : undefined}
+      />
+    </>
   )
 }
 

@@ -35,6 +35,7 @@ afterEach(async () => {
   await act(async () => root?.unmount())
   root = undefined
   container.remove()
+  vi.restoreAllMocks()
   vi.clearAllMocks()
   vi.unstubAllGlobals()
 })
@@ -121,5 +122,16 @@ describe('修正日期后的账单导入流程', () => {
     expect(container.textContent).toContain('测试文件格式错误')
     expect(container.querySelector('input[type=file]')).not.toBeNull()
     expect(container.querySelector('.import-success')).toBeNull()
+  })
+
+  it('账目导入成功但本地历史保存失败时明确提示', async () => {
+    const calls = await openImport([expense])
+    vi.spyOn(window.localStorage, 'setItem').mockImplementation(() => { throw new Error('quota exceeded') })
+
+    await clickButton(/^确认导入 1 笔$/)
+
+    expect(calls.onImport).toHaveBeenCalledOnce()
+    expect(container.textContent).toContain('成功导入 1 笔')
+    expect(container.textContent).toContain('导入历史未能保存')
   })
 })
